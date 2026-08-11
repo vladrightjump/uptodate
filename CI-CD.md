@@ -1,0 +1,95 @@
+# CI + Deploy
+
+Every push to `main` runs the full check suite, and **only if it passes** does a
+deploy get triggered. The pipeline then waits for proof that the new build is
+actually serving on the production domain before it goes green.
+
+Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+
+## How it fits together
+
+```
+push to main
+  ├─ test      typecheck · lint · unit tests · coverage · build
+  ├─ qa-prep   typecheck · build · standalone guide
+  └─ deploy    (needs both)
+       ├─ POST the Vercel deploy hook
+       └─ poll https://<site>/version.json until it reports this commit
+```
+
+On a **pull request** the two check jobs run and the deploy job is skipped, so a
+broken pipeline is caught before the merge rather than after.
+
+## Why the deploy hook instead of Vercel's git integration
+
+Vercel's git auto-deploy is **disabled for `main`** in `vercel.json`:
+
+```json
+"git": { "deploymentEnabled": { "main": false } }
+```
+
+Without that, a push to `main` would deploy immediately and in parallel with CI
+— so a red pipeline would still ship. With it, `main` deploys only through the
+hook, which the `deploy` job fires after the checks pass.
+
+Preview deployments for other branches and PRs are **unaffected** and still
+happen automatically.
+
+Two things still bypass this pipeline, by design of the platform rather than
+choice: a manual `vercel --prod` from a laptop, and a redeploy triggered from
+the Vercel dashboard.
+
+## Proving the deploy is live
+
+`POST`ing the hook only proves the request was accepted — the build can still
+fail afterwards, and the domain would keep serving the old bundle behind a green
+tick. So:
+
+- `scripts/write-version.mjs` runs in `prebuild` and writes `public/version.json`
+  with the commit SHA (`VERCEL_GIT_COMMIT_SHA` on Vercel, `git rev-parse` locally).
+  Vite copies it into `dist/`, so it ships with the build.
+- `scripts/check-live-deploy.mjs` polls `https://<site>/version.json` every 10s
+  for up to 5 minutes and fails if the SHA never becomes the one CI pushed.
+- It then checks `/QA-Prep-standalone.html` is served and still contains its
+  question data, since the standalone guide is generated during the same build.
+
+A failed Vercel build never swaps the domain alias, so it surfaces here as a
+timeout with a pointer to the deployment logs.
+
+## Required configuration
+
+| Name | Kind | Required | Purpose |
+|---|---|---|---|
+| `VERCEL_DEPLOY_HOOK_URL` | repository **secret** | yes | The URL CI posts to in order to deploy. Without it the `deploy` job fails with a clear error. |
+| `SITE_URL` | repository **variable** | no | Production origin to verify. Defaults to `https://qa-app-topaz-nine.vercel.app`. Set it if a custom domain is added. |
+
+### Creating the deploy hook
+
+1. Vercel → project **qa-app** → **Settings** → **Git** → **Deploy Hooks**.
+2. Create one named e.g. `ci-main`, branch `main`. Copy the URL.
+3. GitHub → repo **Settings** → **Secrets and variables** → **Actions** →
+   **New repository secret**, name `VERCEL_DEPLOY_HOOK_URL`, paste the URL.
+
+The hook URL is a credential: anyone holding it can trigger a production
+deploy. Keep it in the secret store, never in the repo.
+
+> **Order matters.** Once `git.deploymentEnabled.main = false` is on `main`,
+> nothing deploys until that secret exists. Create the hook and add the secret
+> **before** merging, or production will simply stop updating.
+
+## Running the pieces locally
+
+```sh
+npm run build                       # runs prebuild: version.json + standalone guide
+node scripts/write-version.mjs      # just the version stamp
+
+EXPECTED_SHA=$(git rev-parse HEAD) \
+SITE_URL=https://qa-app-topaz-nine.vercel.app \
+TIMEOUT_MS=60000 \
+node scripts/check-live-deploy.mjs  # same check CI runs
+```
+
+## Node version
+
+CI pins Node **24** to match the project's Vercel build runtime, so CI cannot
+pass on something that would fail to build in production.

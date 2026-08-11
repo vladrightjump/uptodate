@@ -1,39 +1,40 @@
-name: CI
+name: CI + Deploy
+
+# On push to main: run every check, and only if they all pass trigger the
+# Vercel deploy (deploy hook) and verify on LIVE that the new build is really
+# up. Vercel's git auto-deploy is disabled for main (vercel.json →
+# git.deploymentEnabled), so a push cannot bypass the checks. A manual
+# `vercel --prod` still goes around this pipeline — see CI-CD.md, which also
+# documents the required secrets.
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
+  # Checks run on PRs too, so a broken pipeline is caught BEFORE the merge,
+  # not after. The deploy job is limited to push (see its `if` below).
   pull_request:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-defaults:
-  run:
-    working-directory: .
+  # One pipeline per branch, but never cancel a deploy that is in flight.
+  group: ci-deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  verify:
-    name: Lint, typecheck, test, build
+  test:
+    name: Checks (typecheck + tests + build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [20, 22]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          # Same major as the project's Vercel build runtime (24.x), so CI
+          # cannot go green on something that dies building in production.
+          node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -51,22 +52,21 @@ jobs:
         run: npm run test -- --reporter=verbose
 
       - name: Coverage report
-        if: matrix.node-version == 20
         run: npm run test:coverage
 
       - name: Upload coverage artifact
-        if: matrix.node-version == 20
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage
           if-no-files-found: ignore
 
-      - name: Production build
+      # Runs the prebuild hook too, so the standalone guide and version.json
+      # are exercised here exactly as they will be on Vercel.
+      - name: Build
         run: npm run build
 
       - name: Upload production bundle
-        if: matrix.node-version == 20
         uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -74,7 +74,7 @@ jobs:
           if-no-files-found: error
 
   qa-prep:
-    name: qa-prep — typecheck, build, standalone
+    name: qa-prep (typecheck + build + standalone)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -83,13 +83,11 @@ jobs:
         working-directory: qa-prep
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: qa-prep/package-lock.json
 
@@ -99,12 +97,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Production build
+      - name: Build
         run: npm run build
 
       # The same generator the root prebuild hook runs before deploying, so a
-      # broken question file fails the PR rather than the Vercel build.
-      - name: Build standalone HTML
+      # broken question file fails the PR rather than the deploy.
+      - name: Build standalone study guide
         run: npm run standalone
 
       - name: Upload standalone study guide
@@ -113,3 +111,36 @@ jobs:
           name: QA-Prep-standalone
           path: qa-prep/QA-Prep-standalone.html
           if-no-files-found: error
+
+  deploy:
+    name: Deploy to Vercel + verify live
+    needs: [test, qa-prep]
+    # Push to main / manual run only — a PR gets verified, not deployed.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trigger the Vercel deploy (deploy hook)
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Secret VERCEL_DEPLOY_HOOK_URL is missing. See CI-CD.md."
+            exit 1
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null
+          echo "Deploy triggered for ${GITHUB_SHA:0:8}."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify on live that the new build is up
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://qa-app-topaz-nine.vercel.app' }}
+          TIMEOUT_MS: "300000"
+        run: node scripts/check-live-deploy.mjs
