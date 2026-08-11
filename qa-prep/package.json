@@ -1,0 +1,25 @@
+{
+  "name": "qa-prep",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "QA interview preparation \u2014 SQL, Selenium, test design, mobile testing",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "standalone": "node scripts/build-standalone.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
