@@ -10,7 +10,7 @@ Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ```
 push to main
-  ├─ test      typecheck · lint · unit tests · coverage · build
+  ├─ test      typecheck · lint · unit tests · coverage · build · build:site
   ├─ qa-prep   typecheck · build · standalone guide
   └─ deploy    (needs both)
        ├─ POST the Vercel deploy hook
@@ -39,15 +39,36 @@ Two things still bypass this pipeline, by design of the platform rather than
 choice: a manual `vercel --prod` from a laptop, and a redeploy triggered from
 the Vercel dashboard.
 
+## What gets deployed
+
+The domain serves the **qa-prep** app, not the legacy app at the repo root:
+
+```json
+"buildCommand": "npm run build:site",
+"outputDirectory": "qa-prep/dist"
+```
+
+`build:site` installs qa-prep, builds it, then drops the standalone guide and
+the version stamp into the same `dist/`. So:
+
+| Path | Serves |
+|---|---|
+| `/` | the qa-prep app |
+| `/QA-Prep-standalone.html` | the single-file editorial study guide |
+| `/version.json` | the commit stamp CI verifies against |
+
+The legacy app still lives at the repo root and is still built and tested in
+CI, so it cannot rot unnoticed — it is simply no longer deployed.
+
 ## Proving the deploy is live
 
 `POST`ing the hook only proves the request was accepted — the build can still
 fail afterwards, and the domain would keep serving the old bundle behind a green
 tick. So:
 
-- `scripts/write-version.mjs` runs in `prebuild` and writes `public/version.json`
-  with the commit SHA (`VERCEL_GIT_COMMIT_SHA` on Vercel, `git rev-parse` locally).
-  Vite copies it into `dist/`, so it ships with the build.
+- `scripts/write-version.mjs` runs at the end of `build:site` and writes
+  `version.json` into the deploy output with the commit SHA
+  (`VERCEL_GIT_COMMIT_SHA` on Vercel, `git rev-parse` locally).
 - `scripts/check-live-deploy.mjs` polls `https://<site>/version.json` every 10s
   for up to 5 minutes and fails if the SHA never becomes the one CI pushed.
 - It then checks `/QA-Prep-standalone.html` is served and still contains its
@@ -80,8 +101,8 @@ deploy. Keep it in the secret store, never in the repo.
 ## Running the pieces locally
 
 ```sh
-npm run build                       # runs prebuild: version.json + standalone guide
-node scripts/write-version.mjs      # just the version stamp
+npm run build:site                  # exactly what Vercel runs
+npm run build                       # the legacy app, not deployed
 
 EXPECTED_SHA=$(git rev-parse HEAD) \
 SITE_URL=https://qa-app-topaz-nine.vercel.app \

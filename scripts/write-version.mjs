@@ -10,7 +10,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const out = resolve(root, "public/version.json");
+/* Defaults to the old app's public/; the deployed site passes its own path. */
+const out = process.argv[2]
+  ? resolve(process.argv[2])
+  : resolve(root, "public/version.json");
 
 function gitSha() {
   try {

@@ -6,8 +6,8 @@
   "description": "Senior QA Automation interview preparation app \u2014 Playwright, TypeScript, SQL, REST API",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/write-version.mjs && cd qa-prep && npm ci && npm run standalone -- ../public/QA-Prep-standalone.html",
     "build": "tsc -b && vite build",
+    "build:site": "cd qa-prep && npm ci && npm run build && npm run standalone -- dist/QA-Prep-standalone.html && node ../scripts/write-version.mjs dist/version.json",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx",
     "typecheck": "tsc -p tsconfig.json --noEmit",

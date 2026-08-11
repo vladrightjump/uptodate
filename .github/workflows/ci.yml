@@ -61,16 +61,29 @@ jobs:
           path: coverage
           if-no-files-found: ignore
 
-      # Runs the prebuild hook too, so the standalone guide and version.json
-      # are exercised here exactly as they will be on Vercel.
-      - name: Build
+      # The legacy app. No longer deployed, but still built so it cannot rot
+      # unnoticed while it lives in the repo.
+      - name: Build (legacy app)
         run: npm run build
+
+      # What Vercel actually deploys — same command, same output directory.
+      - name: Build the deployed site
+        run: npm run build:site
+
+      - name: Check the deployed output is complete
+        run: |
+          for f in qa-prep/dist/index.html \
+                   qa-prep/dist/QA-Prep-standalone.html \
+                   qa-prep/dist/version.json; do
+            [ -s "$f" ] || { echo "::error::missing from the deploy output: $f"; exit 1; }
+          done
+          echo "Deploy output looks complete."
 
       - name: Upload production bundle
         uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: dist
+          path: qa-prep/dist
           if-no-files-found: error
 
   qa-prep:
