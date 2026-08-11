@@ -18,7 +18,6 @@
       ]
     },
     {
-      "//": "The standalone study guide is one self-contained file — its CSS and JS are inline by design, so it needs 'unsafe-inline' that the rest of the site does not. It loads nothing external and takes no user input. This rule is listed after the catch-all so it wins for this path.",
       "source": "/QA-Prep-standalone.html",
       "headers": [
         {
