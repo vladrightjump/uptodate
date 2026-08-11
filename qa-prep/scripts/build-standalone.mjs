@@ -4,7 +4,7 @@
    Usage: node scripts/build-standalone.mjs [outputPath]
 */
 import { build } from "esbuild";
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -115,6 +115,9 @@ ${js}
 </html>
 `;
 
+/* The target directory may not exist — git does not track empty ones, so a
+   fresh clone has no public/ for the root prebuild hook to write into. */
+await mkdir(dirname(out), { recursive: true });
 await writeFile(out, html, "utf8");
 console.log(
   `wrote ${out} — ${total} questions, ${(html.length / 1024).toFixed(0)} KB`

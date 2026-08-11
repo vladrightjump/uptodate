@@ -3,9 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Senior QA Automation interview preparation app — Playwright, TypeScript, SQL, REST API",
+  "description": "Senior QA Automation interview preparation app \u2014 Playwright, TypeScript, SQL, REST API",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/write-version.mjs && cd qa-prep && npm ci && npm run standalone -- ../public/QA-Prep-standalone.html",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx",
