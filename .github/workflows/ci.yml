@@ -72,3 +72,44 @@ jobs:
           name: dist
           path: dist
           if-no-files-found: error
+
+  qa-prep:
+    name: qa-prep — typecheck, build, standalone
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: qa-prep
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: qa-prep/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      # The same generator the root prebuild hook runs before deploying, so a
+      # broken question file fails the PR rather than the Vercel build.
+      - name: Build standalone HTML
+        run: npm run standalone
+
+      - name: Upload standalone study guide
+        uses: actions/upload-artifact@v4
+        with:
+          name: QA-Prep-standalone
+          path: qa-prep/QA-Prep-standalone.html
+          if-no-files-found: error

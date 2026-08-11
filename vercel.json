@@ -16,6 +16,16 @@
         { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), interest-cohort=()" }
       ]
+    },
+    {
+      "//": "The standalone study guide is one self-contained file — its CSS and JS are inline by design, so it needs 'unsafe-inline' that the rest of the site does not. It loads nothing external and takes no user input. This rule is listed after the catch-all so it wins for this path.",
+      "source": "/QA-Prep-standalone.html",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'; object-src 'none'; upgrade-insecure-requests"
+        }
+      ]
     }
   ]
 }
