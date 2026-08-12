@@ -138,7 +138,7 @@
           esc(t.caption) +
           "</span></figcaption>"
         : "") +
-      '<table class="data"><thead><tr>' +
+      '<div class="scroll"><table class="data"><thead><tr>' +
       t.columns
         .map(function (c) {
           return "<th>" + esc(c) + "</th>";
@@ -158,7 +158,7 @@
           );
         })
         .join("") +
-      "</tbody></table></figure>"
+      "</tbody></table></div></figure>"
     );
   }
 

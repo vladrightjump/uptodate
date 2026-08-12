@@ -333,7 +333,7 @@ WHERE s.end_date IS NULL`,
       diff: "mid",
       tags: ["api", "http"],
       answer: `<p class="say">Say this: "GET reads, POST creates, PUT replaces — and the important difference is what happens if you send it twice."</p>
-<table class="cmp">
+<div class="scroll"><table class="cmp">
 <thead><tr><th></th><th>GET</th><th>POST</th><th>PUT</th></tr></thead>
 <tbody>
 <tr><th>Does</th><td>Reads</td><td>Creates</td><td>Replaces</td></tr>
@@ -341,7 +341,7 @@ WHERE s.end_date IS NULL`,
 <tr><th>Data goes</th><td>In the URL</td><td>In the body</td><td>In the body</td></tr>
 <tr><th>Send twice</th><td>Same result</td><td><strong>Two records</strong></td><td>Same result</td></tr>
 <tr><th>Success</th><td>200</td><td>201</td><td>200 or 204</td></tr>
-</tbody></table>
+</tbody></table></div>
 <ul>
 <li><strong>That "send twice" row is the point.</strong> PUT five times leaves one record. POST five times creates five orders — which is why a double-clicked Pay button is a real bug.</li>
 <li>GET must never change anything. A delete link done as a GET is a genuine defect: crawlers will trigger it.</li>
