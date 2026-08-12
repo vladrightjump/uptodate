@@ -19,37 +19,38 @@ export const ROUND_A: Round = {
           ["3", "3", "CompanyA", "Engineer"],
         ],
       },
-      answer: `<p>The <code>employment</code> table has no last name — it only has <code>person_id</code>. So this needs a <strong>join</strong> back to the people table (call it <code>persons</code> / <code>people</code> / <code>users</code> — say the name out loud and ask if you're unsure; interviewers like that you noticed the table wasn't given).</p>
-<p><strong>Say this first:</strong> "I need two tables — employment gives me the company, the persons table gives me the last name. I'll join them on <code>person_id</code>."</p>
-<p>Notes worth mentioning:</p>
+      answer: `<p class="say">Say this: "The employment table has no last name — only person_id. So I join it to the people table."</p>
+<p><strong>How it works</strong></p>
+<ul class="clauses">
+<li><code>SELECT</code> the columns you want back</li>
+<li><code>FROM</code> the table you start from</li>
+<li><code>JOIN</code> glues the second table on</li>
+<li><code>ON</code> the column the two share</li>
+<li><code>WHERE</code> throws away the rows you don't want</li>
+</ul>
 <ul>
-<li><code>INNER JOIN</code> is correct here — a person with no employment row shouldn't appear.</li>
-<li>Filter values belong in <strong>parameters</strong> (<code>:last_name</code>), not string-concatenated — that's the SQL-injection point on a login/search form.</li>
-<li>If names may differ in case or have trailing spaces: <code>WHERE LOWER(TRIM(p.last_name)) = LOWER(:last_name)</code>.</li>
-<li>One person can have several employment rows — add <code>DISTINCT</code> if you only want the people, not the roles.</li>
+<li><code>INNER JOIN</code> is right — someone with no job shouldn't appear.</li>
+<li>Use a parameter, not <code>'Smith'</code> glued into the string. That's the SQL-injection hole.</li>
+<li>One person can have several roles. Add <code>DISTINCT</code> if you want people, not rows.</li>
 </ul>`,
       solution: [
         {
           lang: "sql",
           caption: "The join",
-          src: `SELECT p.person_id,
-       p.first_name,
-       p.last_name,
-       e.company_name,
-       e.role
-FROM   persons p
-JOIN   employment e ON e.person_id = p.person_id
-WHERE  p.last_name  = 'Smith'
-  AND  e.company_name = 'CompanyA';`,
+          src: `SELECT p.first_name, p.last_name    -- what to show
+FROM   persons p                    -- start table
+JOIN   employment e                 -- add company rows
+       ON e.person_id = p.person_id -- how they match
+WHERE  p.last_name    = 'Smith'     -- filter people
+  AND  e.company_name = 'CompanyA'; -- filter company`,
         },
         {
           lang: "sql",
-          caption: "Distinct people only (person may hold several roles)",
+          caption: "One row per person, even with several roles",
           src: `SELECT DISTINCT p.person_id, p.first_name, p.last_name
 FROM   persons p
 JOIN   employment e ON e.person_id = p.person_id
-WHERE  p.last_name  = 'Smith'
-  AND  e.company_name = 'CompanyA';`,
+WHERE  p.last_name = 'Smith' AND e.company_name = 'CompanyA';`,
         },
       ],
     },
@@ -58,37 +59,40 @@ WHERE  p.last_name  = 'Smith'
       q: "Get all rows where draw_date is after today, from the lottery_draws table.",
       diff: "easy",
       tags: ["sql", "dates"],
-      answer: `<p>"After today" means strictly greater than today's date. The trap is the <strong>data type</strong>:</p>
-<ul>
-<li>If <code>draw_date</code> is a <strong>DATE</strong>, <code>&gt; CURRENT_DATE</code> is exactly right.</li>
-<li>If it is a <strong>DATETIME / TIMESTAMP</strong>, <code>&gt; CURRENT_DATE</code> would also return draws later <em>today</em> (e.g. 20:00 tonight), because <code>CURRENT_DATE</code> is midnight. Decide which you want and say so.</li>
-<li>Beware time zones — the DB server's "today" may not be the user's "today". <code>CURRENT_DATE</code> is evaluated on the server.</li>
+      answer: `<p class="say">Say this: "Everything where draw_date is greater than today's date."</p>
+<p><strong>How it works</strong></p>
+<ul class="clauses">
+<li><code>SELECT *</code> every column</li>
+<li><code>FROM</code> the table</li>
+<li><code>WHERE</code> keep only future rows</li>
+<li><code>&gt;</code> strictly after — today itself is out</li>
+<li><code>ORDER BY</code> soonest draw first</li>
 </ul>
-<p>Also mention: <strong>don't wrap the column in a function</strong> (<code>WHERE DATE(draw_date) &gt; ...</code>) — that kills the index on <code>draw_date</code> and forces a full scan.</p>`,
+<ul>
+<li>Ask the column type. If <code>draw_date</code> is a <strong>DATE</strong>, this is exact.</li>
+<li>If it's a <strong>DATETIME</strong>, <code>&gt; CURRENT_DATE</code> also returns draws later <em>today</em>, because that means midnight.</li>
+<li>Never write <code>WHERE DATE(draw_date) &gt; ...</code> — wrapping the column in a function kills the index.</li>
+</ul>`,
       solution: [
         {
           lang: "sql",
-          caption: "ANSI SQL / PostgreSQL",
-          src: `SELECT *
-FROM   lottery_draws
-WHERE  draw_date > CURRENT_DATE
-ORDER  BY draw_date ASC;`,
+          caption: "Standard SQL / PostgreSQL",
+          src: `SELECT *                        -- every column
+FROM   lottery_draws            -- the table
+WHERE  draw_date > CURRENT_DATE -- strictly after today
+ORDER  BY draw_date;            -- soonest first`,
         },
         {
           lang: "sql",
-          caption: "Dialect variants",
+          caption: "Same idea, other engines",
           src: `-- MySQL
-SELECT * FROM lottery_draws WHERE draw_date > CURDATE();
+WHERE draw_date > CURDATE()
 
 -- SQL Server
-SELECT * FROM lottery_draws WHERE draw_date > CAST(GETDATE() AS date);
+WHERE draw_date > CAST(GETDATE() AS date)
 
 -- Oracle
-SELECT * FROM lottery_draws WHERE draw_date > TRUNC(SYSDATE);
-
--- Datetime column, want strictly tomorrow onward (Postgres)
-SELECT * FROM lottery_draws
-WHERE  draw_date >= CURRENT_DATE + INTERVAL '1 day';`,
+WHERE draw_date > TRUNC(SYSDATE)`,
         },
       ],
     },
@@ -97,28 +101,33 @@ WHERE  draw_date >= CURRENT_DATE + INTERVAL '1 day';`,
       q: "Write a SQL query to retrieve dob for first_name = 'John' (dob = date of birth). Main table is users.",
       diff: "easy",
       tags: ["sql"],
-      answer: `<p>The simplest question in the set — the point is whether you write it cleanly and say something intelligent around it.</p>
-<p>Things to add after you write it:</p>
+      answer: `<p class="say">Say this: "Select dob from users, filtered on first name."</p>
+<p><strong>How it works</strong></p>
+<ul class="clauses">
+<li><code>SELECT</code> the column to return — <code>dob</code></li>
+<li><code>FROM</code> the table — <code>users</code></li>
+<li><code>WHERE</code> the filter — first name is John</li>
+<li><code>=</code> exact match, not a partial one</li>
+</ul>
 <ul>
-<li>This returns <strong>one row per John</strong>, not one row. Select an identifying column too, otherwise the result is a list of dates you can't attribute to anyone.</li>
-<li>Comparison is case-sensitive in some engines (Postgres) and not in others (MySQL with a <code>ci</code> collation). Use <code>UPPER()</code>/<code>ILIKE</code> if that matters.</li>
-<li>In real code it would be a bound parameter, not a literal.</li>
-<li>DOB is personal data — mention that in a real system access to it is restricted / masked (nice signal on a QA interview).</li>
+<li>This gives <strong>one row per John</strong>. Add a name or id column, or you get a list of dates you can't match to anyone.</li>
+<li>In real code the value is a parameter, not text in the query.</li>
+<li>Nice extra: date of birth is personal data, so in production access to it is restricted.</li>
 </ul>`,
       solution: [
         {
           lang: "sql",
           caption: "As asked",
-          src: `SELECT dob
-FROM   users
-WHERE  first_name = 'John';`,
+          src: `SELECT dob                    -- the column to return
+FROM   users                  -- the table
+WHERE  first_name = 'John';   -- the filter`,
         },
         {
           lang: "sql",
           caption: "What you'd actually run",
           src: `SELECT user_id, first_name, last_name, dob
 FROM   users
-WHERE  first_name = 'John'
+WHERE  first_name = :first_name   -- parameter, not a literal
 ORDER  BY last_name;`,
         },
       ],
@@ -146,27 +155,55 @@ ORDER  BY last_name;`,
   }
 })();`,
       },
-      answer: `<p><strong>What the script does overall:</strong> opens Chrome, goes to Google, types "Selenium WebDriver" into the search box, presses Enter, waits up to 5 seconds for the page title to contain that text, prints the title, and closes the browser — whatever happened.</p>
-<p><strong>Line by line:</strong></p>
-<ol>
-<li><code>const { Builder, By, Key, until } = require('selenium-webdriver');</code> — imports four things from the Selenium package by destructuring: <code>Builder</code> creates the driver, <code>By</code> holds the locator strategies (<code>By.id</code>, <code>By.css</code>, <code>By.name</code>…), <code>Key</code> holds special keyboard keys (Enter, Tab, Escape), <code>until</code> holds the ready-made expected conditions used with explicit waits.</li>
-<li><code>(async function example() { … })();</code> — an <strong>IIFE</strong> (immediately-invoked function expression) declared <code>async</code>. Selenium's JS API is promise-based, so we need an async context to use <code>await</code>; the trailing <code>()</code> runs it straight away.</li>
-<li><code>let driver = await new Builder().forBrowser('chrome').build();</code> — builds the WebDriver session: <code>forBrowser('chrome')</code> picks the browser, <code>build()</code> starts ChromeDriver and launches a fresh Chrome instance. <code>driver</code> is the handle used for everything afterwards.</li>
-<li><code>try { … } finally { … }</code> — everything that can fail goes in <code>try</code>; the <code>finally</code> block runs whether the test passes or throws. This is the pattern that guarantees the browser is closed.</li>
-<li><code>await driver.get('https://www.google.com');</code> — navigates to the URL and waits for the document load event.</li>
-<li><code>let searchBox = await driver.findElement(By.name('q'));</code> — finds the first element whose <code>name</code> attribute is <code>q</code> (Google's search input) and returns a <strong>WebElement</strong> reference. If nothing matches, it throws <code>NoSuchElementError</code>.</li>
-<li><code>await searchBox.sendKeys('Selenium WebDriver', Key.RETURN);</code> — types the text into that input and then sends the Enter key, which submits the search. Two arguments = two things typed in sequence.</li>
-<li><code>await driver.wait(until.titleContains('Selenium WebDriver'), 5000);</code> — an <strong>explicit wait</strong>: poll until the page title contains the string, giving up after 5000 ms with a <code>TimeoutError</code>. This is the synchronisation point — without it the next line could read the old title.</li>
-<li><code>let title = await driver.getTitle();</code> — reads the current page title into a variable.</li>
-<li><code>console.log('Page title is:', title);</code> — prints it. Note this is only logging — <strong>there is no assertion in this script</strong>, so strictly it's a script, not a test. Good thing to point out.</li>
-<li><code>await driver.quit();</code> — closes every window of the session and kills the ChromeDriver process, releasing the port and profile. Being in <code>finally</code> means no orphaned browsers even when a step fails.</li>
-</ol>
-<p><strong>Follow-ups they usually ask:</strong></p>
+      answer: `<p class="say">Say this: "It opens Chrome, searches Google for 'Selenium WebDriver', waits for the title to change, prints it, and always closes the browser."</p>
+<p><strong>How it works</strong></p>
+<ul class="clauses">
+<li><code>require</code> pulls in the four tools it needs</li>
+<li><code>Builder</code> creates the driver and launches Chrome</li>
+<li><code>By</code> holds the ways to find elements</li>
+<li><code>Key</code> holds special keys like Enter</li>
+<li><code>until</code> holds the conditions you can wait for</li>
+<li><code>async</code>/<code>await</code> Selenium returns promises, so we wait for each step</li>
+<li><code>get</code> goes to the URL</li>
+<li><code>findElement</code> finds the search box by its name attribute</li>
+<li><code>sendKeys</code> types the text, then presses Enter</li>
+<li><code>wait</code> pauses until the title contains the text, max 5 seconds</li>
+<li><code>getTitle</code> reads the title into a variable</li>
+<li><code>finally</code> runs even if a step fails</li>
+<li><code>quit</code> closes the browser and ends the session</li>
+</ul>
 <ul>
-<li><em>Why <code>quit()</code> and not <code>close()</code>?</em> — <code>close()</code> closes only the current window and leaves the session (and process) alive; <code>quit()</code> ends the whole session.</li>
-<li><em>How would you improve it?</em> — add a real assertion instead of <code>console.log</code>, move the locator into a Page Object, avoid a hard-coded site, and don't mix implicit and explicit waits.</li>
-<li><em>What if the element isn't found?</em> — <code>findElement</code> throws <code>NoSuchElementError</code> immediately, the <code>try</code> block aborts, <code>finally</code> still quits the driver, and the process exits with the unhandled rejection.</li>
+<li><strong>Spot this:</strong> it only logs the title. No assertion, so it can never fail. It's a script, not a test.</li>
+<li><em>Why <code>quit()</code> not <code>close()</code>?</em> <code>close()</code> shuts one window; <code>quit()</code> ends the whole session and kills the driver process.</li>
+<li><em>If the element isn't found?</em> <code>findElement</code> throws <code>NoSuchElementError</code>, the rest is skipped, and <code>finally</code> still closes the browser.</li>
 </ul>`,
+      solution: [
+        {
+          lang: "js",
+          caption: "The same script, annotated",
+          src: `// Builder = makes the driver, By = how to find things,
+// Key = special keys, until = conditions you can wait for
+const { Builder, By, Key, until } = require('selenium-webdriver');
+
+(async function example() {          // async so we can await
+  let driver = await new Builder()
+    .forBrowser('chrome').build();   // launches Chrome
+  try {
+    await driver.get('https://www.google.com');        // open the page
+    let searchBox = await driver
+      .findElement(By.name('q'));                      // find input name="q"
+    await searchBox
+      .sendKeys('Selenium WebDriver', Key.RETURN);     // type, then Enter
+    await driver.wait(
+      until.titleContains('Selenium WebDriver'), 5000);// wait, max 5s
+    let title = await driver.getTitle();               // read the title
+    console.log('Page title is:', title);              // print (no assert!)
+  } finally {
+    await driver.quit();             // always closes, pass or fail
+  }
+})();`,
+        },
+      ],
     },
   ],
 };

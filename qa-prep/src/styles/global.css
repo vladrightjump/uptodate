@@ -543,6 +543,42 @@ input {
   line-height: 1.6;
 }
 
+/* "Say this:" — the sentence to actually say out loud */
+.prose p.say {
+  margin: 12px 0 14px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  font-size: 15px;
+}
+
+/* clause-by-clause breakdown of a query or script */
+.prose ul.clauses {
+  margin: 10px 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.prose ul.clauses > li {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.prose ul.clauses code {
+  flex: none;
+  width: 8rem;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 /* comparison table inside answers (GET/POST/PUT) */
 .prose table.cmp {
   width: 100%;

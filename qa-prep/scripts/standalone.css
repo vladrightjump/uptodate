@@ -599,6 +599,48 @@ input {
   white-space: pre;
 }
 
+/* "Say this:" — the sentence to actually say out loud */
+.prose p.say {
+  margin: 0 0 16px;
+  padding: 10px 0 10px 16px;
+  border-left: 2px solid var(--accent);
+  font-size: 17px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* clause-by-clause breakdown of a query or script */
+.prose ul.clauses {
+  margin: 6px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.prose ul.clauses > li {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.prose ul.clauses > li::before {
+  content: none;
+}
+
+.prose ul.clauses code {
+  flex: none;
+  width: 8.5rem;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  line-height: 1.75;
+  white-space: nowrap;
+}
+
 /* comparison table inside an answer */
 .prose table.cmp {
   width: 100%;
