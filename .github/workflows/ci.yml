@@ -10,10 +10,13 @@ name: CI + Deploy
 on:
   push:
     branches: [main]
-  # Checks run on PRs too, so a broken pipeline is caught BEFORE the merge,
-  # not after. The deploy job is limited to push (see its `if` below).
+  # Checks run on EVERY pull request, whatever it targets — not just PRs into
+  # main. A stacked PR (feature -> feature) that only filtered on main would
+  # report nothing but the Vercel preview and could be merged unchecked, and
+  # the code then reaches main through its base branch without ever having
+  # been typechecked, tested or built.
+  # The deploy job is limited to push (see its `if` below).
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
