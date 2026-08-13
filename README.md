@@ -134,19 +134,28 @@ qa-app/
 │   │   └── useReveal.ts    # Scroll-reveal animation
 │   ├── test/setup.ts       # Vitest + jest-dom setup
 │   └── styles/global.css   # CSS variables, layout, all component styles
-└── qa-prep/                # Self-contained sub-project (own package.json)
-    ├── src/                # React app for the four interview rounds
-    └── scripts/            # Bundles it into one offline HTML file
+└── qa-prep/                # The deployed app (own package.json)
+    ├── src/
+    │   ├── fonts/          # Nunito + JetBrains Mono, latin subsets (OFL)
+    │   ├── data/round-*.ts # The four interview rounds
+    │   └── styles/         # Warm-paper design tokens, light + dark
+    └── scripts/
+        └── build-standalone.mjs  # Bundles the React app into one HTML file
 ```
 
 ### The `qa-prep/` sub-project — this is what deploys
 
 `qa-prep/` is a separate, smaller app covering four specific interview
 rounds, and **it is what the domain actually serves**. `npm run build:site`
-builds it, then inlines the data, CSS, and JS into a single self-contained
-HTML file that opens straight from disk with no network access, and stamps
-the commit SHA into `version.json` so CI can verify the deploy went live.
-Everything lands in `qa-prep/dist/`. See `CI-CD.md`.
+builds it, stamps the commit SHA into `version.json` so CI can verify the
+deploy went live, and produces the standalone guide. Everything lands in
+`qa-prep/dist/`. See `CI-CD.md`.
+
+**The standalone guide is built from the same React source.** `npm run
+standalone` bundles the app, React itself, the styles, the data and the two
+self-hosted fonts into one HTML file that opens straight from disk with no
+network access. There is exactly one implementation of the UI — the guide
+ships what the site runs, so the two cannot drift.
 
 The app at the repo root is the **legacy** one. It is no longer deployed,
 but is still typechecked, tested, and built in CI so it cannot rot

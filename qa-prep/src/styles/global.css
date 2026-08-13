@@ -1,75 +1,127 @@
 /* ==========================================================================
    QA Interview Prep — single stylesheet
+
+   Warm-paper design: Nunito for UI, JetBrains Mono for code, per-round hues
+   built from oklch so every round shares one lightness/chroma and differs
+   only in hue.
+
    Light/dark via prefers-color-scheme, overridden by [data-theme] on <html>.
+
+   The two fonts are self-hosted (latin variable subsets, SIL Open Font
+   License). Vite emits them as files; the standalone build inlines them as
+   data: URIs. Both satisfy the CSP without reaching for Google Fonts.
    ========================================================================== */
 
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("../fonts/nunito-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("../fonts/jetbrains-mono-latin.woff2") format("woff2");
+}
+
 :root {
-  --bg: #f6f7f9;
+  --bg: #fbf6ef;
   --surface: #ffffff;
-  --surface-2: #f1f3f6;
-  --border: #e2e5ea;
-  --border-strong: #cfd4dc;
-  --text: #14181f;
-  --text-dim: #5c6470;
-  --text-faint: #8b93a1;
-  --accent: #2f6df6;
-  --accent-soft: #e8effe;
-  --easy: #2a8a56;
-  --easy-soft: #e4f4eb;
-  --mid: #b7761a;
-  --mid-soft: #fbf1de;
-  --hard: #c0392f;
-  --hard-soft: #fbe9e7;
-  --code-bg: #f5f6f8;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);
-  --radius: 10px;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --surface-2: #f4eee5;
+  --surface-3: #f2eadf;
+  --border: #ede3d6;
+  --border-strong: #dcd0be;
+  --text: #2a2622;
+  --text-dim: #6b625b;
+  --text-faint: #a79c90;
+  --accent: #3b6fd4;
+  --accent-hover: #2b56ad;
+  --accent-soft: #edf2fc;
+
+  /* Difficulty and round colours share one recipe: fixed lightness and
+     chroma, hue alone carries the meaning. Keeps them evenly weighted. */
+  --easy: oklch(0.5 0.13 160);
+  --easy-soft: oklch(0.955 0.028 160);
+  --mid: oklch(0.5 0.13 60);
+  --mid-soft: oklch(0.955 0.028 60);
+  --hard: oklch(0.5 0.13 20);
+  --hard-soft: oklch(0.955 0.028 20);
+
+  --dot-l: 0.6;
+  --dot-c: 0.13;
+
+  --code-bg: #faf6f0;
+  --shadow: 0 2px 0 rgba(42, 38, 34, 0.04);
+  --shadow-lift: 0 4px 14px rgba(42, 38, 34, 0.09);
+  --radius: 20px;
+  --radius-panel: 18px;
+  --radius-control: 12px;
+  --radius-sm: 10px;
+  --sans: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
   color-scheme: light;
 }
 
+/* Dark keeps the warm hue family rather than switching to neutral grey, so
+   the two themes read as one design rather than two. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1216;
-    --surface: #171b21;
-    --surface-2: #1e242c;
-    --border: #272e37;
-    --border-strong: #39424e;
-    --text: #e7eaef;
-    --text-dim: #a2abb8;
-    --text-faint: #757f8d;
-    --accent: #6c9bff;
-    --accent-soft: #1b2842;
-    --easy: #56c98a;
-    --easy-soft: #16301f;
-    --mid: #e0ab5c;
-    --mid-soft: #322613;
-    --hard: #f0796c;
-    --hard-soft: #351d1a;
-    --code-bg: #12161b;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --bg: #17140f;
+    --surface: #201c16;
+    --surface-2: #2a251e;
+    --surface-3: #2f291f;
+    --border: #352f26;
+    --border-strong: #4a4235;
+    --text: #f2ebe0;
+    --text-dim: #bcb0a1;
+    --text-faint: #8c8073;
+    --accent: #7fa5f0;
+    --accent-hover: #9dbbf5;
+    --accent-soft: #1e2436;
+    --easy: oklch(0.78 0.13 160);
+    --easy-soft: oklch(0.3 0.05 160);
+    --mid: oklch(0.8 0.13 60);
+    --mid-soft: oklch(0.31 0.05 60);
+    --hard: oklch(0.75 0.14 20);
+    --hard-soft: oklch(0.31 0.06 20);
+    --dot-l: 0.72;
+    --dot-c: 0.14;
+    --code-bg: #191510;
+    --shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+    --shadow-lift: 0 4px 14px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f1216;
-  --surface: #171b21;
-  --surface-2: #1e242c;
-  --border: #272e37;
-  --border-strong: #39424e;
-  --text: #e7eaef;
-  --text-dim: #a2abb8;
-  --text-faint: #757f8d;
-  --accent: #6c9bff;
-  --accent-soft: #1b2842;
-  --easy: #56c98a;
-  --easy-soft: #16301f;
-  --mid: #e0ab5c;
-  --mid-soft: #322613;
-  --hard: #f0796c;
-  --hard-soft: #351d1a;
-  --code-bg: #12161b;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --bg: #17140f;
+  --surface: #201c16;
+  --surface-2: #2a251e;
+  --surface-3: #2f291f;
+  --border: #352f26;
+  --border-strong: #4a4235;
+  --text: #f2ebe0;
+  --text-dim: #bcb0a1;
+  --text-faint: #8c8073;
+  --accent: #7fa5f0;
+  --accent-hover: #9dbbf5;
+  --accent-soft: #1e2436;
+  --easy: oklch(0.78 0.13 160);
+  --easy-soft: oklch(0.3 0.05 160);
+  --mid: oklch(0.8 0.13 60);
+  --mid-soft: oklch(0.31 0.05 60);
+  --hard: oklch(0.75 0.14 20);
+  --hard-soft: oklch(0.31 0.06 20);
+  --dot-l: 0.72;
+  --dot-c: 0.14;
+  --code-bg: #191510;
+  --shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-lift: 0 4px 14px rgba(0, 0, 0, 0.4);
   color-scheme: dark;
 }
 
@@ -83,9 +135,12 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Helvetica, Arial, sans-serif;
+  font: 600 15px/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-soft);
 }
 
 button,
@@ -111,8 +166,10 @@ input {
   gap: 16px;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
-  background: var(--surface);
+  padding: 14px 28px;
+  /* Translucent so content scrolling underneath stays faintly visible. */
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
 }
 
@@ -126,18 +183,22 @@ input {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   background: var(--accent);
   color: #fff;
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.5px;
 }
 
 .brand strong {
   display: block;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
   line-height: 1.2;
 }
 
@@ -145,6 +206,7 @@ input {
   display: block;
   color: var(--text-faint);
   font-size: 12px;
+  font-weight: 700;
 }
 
 .controls {
@@ -155,37 +217,48 @@ input {
 }
 
 .search {
-  width: 240px;
-  padding: 7px 11px;
-  background: var(--bg);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  width: 280px;
+  max-width: 100%;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-control);
+  font-size: 13.5px;
+  font-weight: 600;
+  outline: none;
+}
+
+.search:focus {
+  border-color: var(--accent);
 }
 
 .search::placeholder {
   color: var(--text-faint);
+  font-weight: 600;
 }
 
 .segmented {
   display: flex;
-  padding: 2px;
-  background: var(--surface-2);
-  border-radius: 8px;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface-3);
+  border-radius: 11px;
 }
 
 .segmented button {
-  padding: 5px 10px;
+  padding: 6px 11px;
   background: none;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 800;
   cursor: pointer;
 }
 
 .segmented button.is-active {
   background: var(--surface);
-  color: var(--text);
+  color: var(--accent);
   box-shadow: var(--shadow);
 }
 
@@ -194,22 +267,25 @@ input {
   align-items: center;
   gap: 6px;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .ghost {
-  padding: 6px 11px;
-  background: none;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  padding: 8px 13px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 800;
   cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
 }
 
 .ghost:hover {
-  background: var(--surface-2);
+  border-color: var(--border-strong);
   color: var(--text);
 }
 
@@ -230,15 +306,15 @@ input {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 20px;
-  background: var(--surface);
+  padding: 10px 28px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
 .progress-bar {
   flex: 1;
-  height: 5px;
-  background: var(--surface-2);
+  height: 6px;
+  background: var(--surface-3);
   border-radius: 99px;
   overflow: hidden;
 }
@@ -247,13 +323,16 @@ input {
   display: block;
   height: 100%;
   background: var(--accent);
+  border-radius: 99px;
   transition: width 0.25s ease;
 }
 
 .progress-label {
   flex: none;
   color: var(--text-faint);
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -261,18 +340,22 @@ input {
 
 .layout {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 24px;
-  max-width: 1240px;
+  grid-template-columns: 252px minmax(0, 1fr);
+  gap: 26px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 24px 20px 80px;
+  padding: 26px 28px 80px;
 }
 
 .sidebar {
   position: sticky;
-  top: 110px;
+  top: 116px;
   align-self: start;
   min-width: 0;
+  padding: 14px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-panel);
 }
 
 .content {
@@ -280,11 +363,11 @@ input {
 }
 
 .sidebar-title {
-  margin: 0 0 8px 10px;
+  margin: 0 0 10px 2px;
   color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -296,37 +379,56 @@ input {
 
 .round-btn {
   display: block;
+  position: relative;
   width: 100%;
-  margin-bottom: 4px;
-  padding: 10px 12px;
+  margin-bottom: 3px;
+  padding: 10px 10px 10px 22px;
   background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  border: 0;
+  border-radius: 11px;
   text-align: left;
   cursor: pointer;
+  transition: background 0.15s;
+}
+
+/* The round's hue, carried as a dot. Set by --round-h on the element. */
+.round-btn::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 14px;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: oklch(var(--dot-l) var(--dot-c) var(--round-h, 250));
 }
 
 .round-btn:hover {
-  background: var(--surface);
+  background: var(--surface-2);
 }
 
 .round-btn.is-active {
-  background: var(--surface);
-  border-color: var(--border);
-  box-shadow: var(--shadow);
+  background: var(--surface-2);
 }
 
 .round-label {
   display: block;
   font-size: 13.5px;
-  font-weight: 500;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.round-btn.is-active .round-label {
+  color: var(--text);
 }
 
 .round-count {
   display: block;
   margin-top: 2px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .round-bar {
@@ -351,19 +453,24 @@ input {
 
 .content-head h1 {
   margin: 0;
-  font-size: 21px;
-  letter-spacing: -0.01em;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.4px;
+  text-wrap: pretty;
 }
 
 .content-head p {
-  margin: 4px 0 20px;
+  margin: 6px 0 22px;
   color: var(--text-dim);
   font-size: 14px;
+  font-weight: 600;
+  text-wrap: pretty;
 }
 
 .empty {
   padding: 40px 0;
   color: var(--text-faint);
+  font-weight: 700;
   text-align: center;
 }
 
@@ -374,13 +481,15 @@ input {
 }
 
 .cards > li {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .result-round {
-  margin: 0 0 4px 2px;
+  margin: 0 0 5px 2px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -389,14 +498,19 @@ input {
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
 }
 
 .card.is-reviewed {
-  border-left: 3px solid var(--easy);
+  border-left: 4px solid var(--easy);
 }
 
 .card-toggle {
@@ -404,7 +518,7 @@ input {
   gap: 12px;
   align-items: flex-start;
   width: 100%;
-  padding: 14px 16px 8px;
+  padding: 16px 18px 8px;
   background: none;
   border: 0;
   text-align: left;
@@ -415,16 +529,20 @@ input {
   flex: none;
   min-width: 22px;
   color: var(--text-faint);
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 1.7;
+  line-height: 1.9;
 }
 
 .card-q {
   flex: 1;
-  font-size: 15.5px;
-  font-weight: 500;
-  line-height: 1.5;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.38;
+  letter-spacing: -0.2px;
+  text-wrap: pretty;
 }
 
 .card-chevron {
@@ -432,6 +550,7 @@ input {
   width: 22px;
   color: var(--text-faint);
   font-size: 18px;
+  font-weight: 700;
   text-align: center;
   line-height: 1.3;
 }
@@ -439,16 +558,16 @@ input {
 .card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 7px;
   align-items: center;
-  padding: 0 16px 12px 50px;
+  padding: 0 18px 14px 52px;
 }
 
 .pill {
-  padding: 2px 8px;
-  border-radius: 99px;
+  padding: 4px 10px;
+  border-radius: 999px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 800;
   letter-spacing: 0.01em;
 }
 
@@ -483,16 +602,19 @@ input {
 }
 
 .card-body {
-  padding: 4px 16px 18px 50px;
-  border-top: 1px solid var(--border);
+  padding: 4px 18px 18px 52px;
+  border-top: 1px dashed var(--border);
   margin-top: 2px;
 }
 
 /* ---------- prose (answer HTML) ---------- */
 
 .prose {
-  color: var(--text);
+  color: var(--text-dim);
   font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.65;
+  text-wrap: pretty;
 }
 
 .prose p {
@@ -515,28 +637,30 @@ input {
 }
 
 .prose strong {
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 800;
 }
 
 .prose em {
-  color: var(--text-dim);
+  color: var(--text-faint);
 }
 
 .prose code {
   padding: 1.5px 5px;
   background: var(--code-bg);
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 6px;
   font-family: var(--mono);
   font-size: 12.5px;
+  font-weight: 500;
 }
 
 .prose pre {
   margin: 12px 0;
   padding: 12px 14px;
   background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
   overflow-x: auto;
 }
 
@@ -551,11 +675,14 @@ input {
 /* "Say this:" — the sentence to actually say out loud */
 .prose p.say {
   margin: 12px 0 14px;
-  padding: 10px 14px;
-  background: var(--surface-2);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 6px 6px 0;
+  padding: 12px 16px;
+  background: var(--code-bg);
+  border: 1.5px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  color: var(--text);
   font-size: 15px;
+  font-weight: 700;
 }
 
 /* clause-by-clause breakdown of a query or script */
@@ -663,28 +790,30 @@ table.data thead th {
 .code {
   margin: 12px 0 12px;
   background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-control);
   overflow: hidden;
 }
 
 .card > .code {
-  margin: 0 16px 14px 50px;
+  margin: 0 18px 14px 52px;
 }
 
 .code figcaption {
   display: flex;
   gap: 10px;
   align-items: center;
-  padding: 6px 12px;
+  padding: 7px 13px;
   background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  font-size: 11.5px;
+  border-bottom: 1.5px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .code-lang {
   color: var(--accent);
   font-family: var(--mono);
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -741,13 +870,29 @@ table.data thead th {
     gap: 6px;
   }
 
+  /* The rounds become a grid of tiles here, so they need their own edges —
+     the sidebar panel that framed them on desktop is no longer doing it. */
   .round-btn {
     margin: 0;
-    border-color: var(--border);
+    border: 1.5px solid var(--border);
+  }
+
+  .round-btn.is-active {
+    border-color: var(--border-strong);
   }
 }
 
 @media (max-width: 640px) {
+  .topbar,
+  .progress-strip {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .layout {
+    padding: 16px 16px 64px;
+  }
+
   .search {
     width: 100%;
   }
