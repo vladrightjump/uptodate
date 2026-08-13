@@ -86,7 +86,7 @@ jobs:
           if-no-files-found: error
 
   qa-prep:
-    name: qa-prep (typecheck + build + standalone)
+    name: qa-prep (typecheck + tests + build + standalone)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -109,6 +109,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # This is the app that actually ships, so its tests are the ones that
+      # gate the deploy. The root job's suite covers the legacy app only.
+      - name: Unit tests
+        run: npm run test
+
       - name: Build
         run: npm run build
 
@@ -127,8 +132,12 @@ jobs:
   deploy:
     name: Deploy to Vercel + verify live
     needs: [test, qa-prep]
-    # Push to main / manual run only — a PR gets verified, not deployed.
-    if: github.event_name != 'pull_request'
+    # main only. The branch check is not redundant with the event check:
+    # workflow_dispatch can be run from ANY branch, and the deploy hook always
+    # builds main's tip regardless of which commit dispatched it. Without this,
+    # dispatching from a feature branch would deploy main and then spend five
+    # minutes polling for a SHA that is never going to be live.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
