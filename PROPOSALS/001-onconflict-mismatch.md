@@ -4,8 +4,8 @@ Status: open. Author: vladfilip94. Date: 2026-05-27.
 
 ## 1. Current state
 
-`changes.md` Iteration 3 (the auth hardening pass) flags a known carry-
-forward:
+The auth hardening pass (see `git log` around the reverted Supabase work)
+left a known carry-forward:
 
 > `src/hooks/useQuestionMeta.ts` uses `onConflict: "question_id"` for
 > upserts on `qa_flags` / `qa_reviewed` (and in the legacy-localStorage
@@ -91,8 +91,7 @@ visible in the suite output.
 
 ## References
 
-- `changes.md` §"Known issues (carry forward)"
-- `AUTH.md §3` (SQL migration)
+- The reverted auth/Supabase commits (SQL migration) — see `git log`
 - `API_DB_TESTING.md §2d, §3`
 - PractiTest *State of Testing Report 2024*, section on integration-
   layer escapes.

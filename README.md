@@ -2,7 +2,7 @@
 
 A personal study app for senior QA Automation Engineer interviews. **~180 questions across 18 categories with full model answers** including TypeScript / Playwright / SQL code examples. Built as a Vite + React + TypeScript single-page app — runs in any modern browser, deploys anywhere static.
 
-![Tech](https://img.shields.io/badge/React-18.3-61dafb?logo=react)
+![Tech](https://img.shields.io/badge/React-19.2-61dafb?logo=react)
 ![Tech](https://img.shields.io/badge/TypeScript-5.6-3178c6?logo=typescript)
 ![Tech](https://img.shields.io/badge/Vite-5.4-646cff?logo=vite)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -15,6 +15,7 @@ A personal study app for senior QA Automation Engineer interviews. **~180 questi
 - [Tech stack](#tech-stack)
 - [Project structure](#project-structure)
 - [Getting started](#getting-started)
+- [Testing](#testing)
 - [Deployment](#deployment)
 - [Adding or editing questions](#adding-or-editing-questions)
 - [Features](#features)
@@ -66,26 +67,33 @@ Every answer includes the *why* — trade-offs, anti-patterns, what interviewers
 - No Tailwind, no styled-components, no CSS-in-JS — handwritten CSS with CSS variables. Smaller bundle, faster first paint, easier to theme.
 - No state management library (Redux, Zustand, etc.) — React's built-in `useState` and a custom `useLocalStorage` hook handle everything.
 - No router — single-page UI, category selection is local state. Adding `react-router` later is straightforward if needed.
-- No testing framework — this is a study tool, not production code. Adding Vitest takes one `npm install` if you want to add tests.
 - No backend — pure static site. No database, no API, no auth.
+- No ESLint yet — TypeScript strict mode is the only static gate. See `TEST_STRATEGY.md`.
+
+### Testing
+
+Vitest + React Testing Library, running in jsdom. 44 tests across 7 files
+cover the components, the `useLocalStorage` hook, and a data-integrity
+suite that fails the build on a malformed question.
+
+```bash
+npm test              # one-shot run
+npm run test:watch    # watch mode
+npm run test:coverage # v8 coverage report
+```
 
 ### Dependencies summary
 
 ```json
 "dependencies": {
-  "react": "^18.3.1",
-  "react-dom": "^18.3.1"
-},
-"devDependencies": {
-  "@types/react": "^18.3.12",
-  "@types/react-dom": "^18.3.1",
-  "@vitejs/plugin-react": "^4.3.4",
-  "typescript": "^5.6.3",
-  "vite": "^5.4.11"
+  "mermaid": "^11.14.0",
+  "react": "^19.2.6",
+  "react-dom": "^19.2.6"
 }
 ```
 
-**That's it.** Two runtime deps, five dev deps. Production bundle ≈ 50 KB gzipped.
+Three runtime deps — `mermaid` renders the inline architecture diagrams;
+everything else is dev-time (TypeScript, Vite, Vitest, Testing Library).
 
 ---
 
@@ -94,32 +102,55 @@ Every answer includes the *why* — trade-offs, anti-patterns, what interviewers
 ```
 qa-app/
 ├── index.html              # Vite entry point
-├── package.json            # 2 runtime + 5 dev dependencies
+├── package.json            # 3 runtime deps; `build:site` builds what ships
 ├── vite.config.ts          # Vite configuration (base: "./" for portable deploys)
 ├── tsconfig.json           # Strict TypeScript settings
 ├── tsconfig.node.json      # Separate config for Vite's Node-side code
-├── vercel.json             # Vercel deploy hints (auto-detected anyway)
-├── .gitignore
-├── README.md
-└── src/
-    ├── main.tsx            # React 19 createRoot entry
-    ├── App.tsx             # Main app shell, state, keyboard shortcuts
-    ├── types/
-    │   └── index.ts        # Shared TypeScript types (Question, Category, Theme, etc.)
-    ├── components/
-    │   ├── TopBar.tsx      # Sticky header with progress bar, theme toggle, reset
-    │   ├── Sidebar.tsx     # Category nav with per-category progress
-    │   └── QuestionCard.tsx # Expandable question card with answer + tags
-    ├── data/
-    │   ├── questions.ts    # Assembles all categories, exports CATEGORIES array
-    │   ├── categories-1.ts # Playwright+TS, REST API
-    │   ├── categories-2.ts # SQL, Framework architecture
-    │   └── categories-3.ts # CI/CD, Testing theory
-    ├── hooks/
-    │   └── useLocalStorage.ts # Custom hook with Set-aware serialization
-    └── styles/
-        └── global.css      # CSS variables, layout, all component styles
+├── vercel.json             # Deploy config + CSP and security headers
+├── .github/workflows/ci.yml # Checks → deploy → verify-on-live (see CI-CD.md)
+├── scripts/
+│   ├── write-version.mjs   # Stamps version.json into the deploy output
+│   └── check-live-deploy.mjs # Polls prod until the new SHA is serving
+├── src/
+│   ├── main.tsx            # React 19 createRoot entry
+│   ├── App.tsx             # App shell, state, keyboard shortcuts
+│   ├── types/index.ts      # Shared types (Question, Category, Theme, …)
+│   ├── components/
+│   │   ├── TopBar.tsx      # Sticky header: progress, theme toggle, reset
+│   │   ├── Sidebar.tsx     # Category nav with per-category progress
+│   │   ├── QuestionCard.tsx # Expandable card with answer, tags, media
+│   │   ├── HomeScreen.tsx  # Landing view
+│   │   ├── FocusSession.tsx # Flash-card drill mode
+│   │   ├── HelpModal.tsx   # Keyboard-shortcut reference
+│   │   ├── Diagram.tsx     # Mermaid diagram renderer
+│   │   ├── MediaBlock.tsx  # Images / figures inside answers
+│   │   └── icons.tsx       # Inline SVG icon set
+│   ├── data/
+│   │   ├── questions.ts    # Assembles all categories, exports CATEGORIES
+│   │   └── categories-*.ts # The question bank, split by topic group
+│   ├── hooks/
+│   │   ├── useLocalStorage.ts # Set-aware persisted state
+│   │   ├── useQuestionMeta.ts # Reviewed / flagged question state
+│   │   └── useReveal.ts    # Scroll-reveal animation
+│   ├── test/setup.ts       # Vitest + jest-dom setup
+│   └── styles/global.css   # CSS variables, layout, all component styles
+└── qa-prep/                # Self-contained sub-project (own package.json)
+    ├── src/                # React app for the four interview rounds
+    └── scripts/            # Bundles it into one offline HTML file
 ```
+
+### The `qa-prep/` sub-project — this is what deploys
+
+`qa-prep/` is a separate, smaller app covering four specific interview
+rounds, and **it is what the domain actually serves**. `npm run build:site`
+builds it, then inlines the data, CSS, and JS into a single self-contained
+HTML file that opens straight from disk with no network access, and stamps
+the commit SHA into `version.json` so CI can verify the deploy went live.
+Everything lands in `qa-prep/dist/`. See `CI-CD.md`.
+
+The app at the repo root is the **legacy** one. It is no longer deployed,
+but is still typechecked, tested, and built in CI so it cannot rot
+unnoticed while it lives here.
 
 ---
 
@@ -127,7 +158,7 @@ qa-app/
 
 ### Prerequisites
 
-- **Node.js 18+** (Vite 5 requires Node 18 or higher)
+- **Node.js 24** — what CI and the Vercel build runtime use. Node 20+ works locally.
 - **npm** (comes with Node) or **pnpm** / **yarn** if preferred
 
 ### Install
@@ -137,7 +168,7 @@ cd qa-app
 npm install
 ```
 
-This installs the seven dependencies and creates `node_modules/` (~80 MB, mostly TypeScript and Vite tooling).
+This creates `node_modules/` (~300 MB, mostly TypeScript, Vite, and the test tooling).
 
 ### Run in development
 
@@ -175,41 +206,29 @@ npx tsc --noEmit
 
 ## Deployment
 
-The project is a static site — deploy it anywhere that serves HTML/CSS/JS files.
+Deployment is automated and **gated** — read `CI-CD.md` before changing it.
 
-### Option 1 — Vercel (recommended, no git required)
-
-```bash
-npm install -g vercel
-cd qa-app
-vercel
-```
-
-Pick defaults at the prompts. You'll get a URL like `qa-prep-yourname.vercel.app` in ~30 seconds. Re-run `vercel` after edits to redeploy.
-
-If you connect a git repo to Vercel later, every `git push` auto-deploys.
-
-### Option 2 — Netlify
+Every push to `main` runs the full check suite, and only if it passes does CI
+trigger the Vercel deploy hook and then poll the live domain until
+`/version.json` reports the pushed commit. Vercel's own git auto-deploy is
+disabled for `main` (`vercel.json` -> `git.deploymentEnabled`), so a push
+cannot bypass the checks.
 
 ```bash
-npm install -g netlify-cli
-npm run build
-netlify deploy --prod --dir=dist
+npm run build:site   # exactly what Vercel runs -> qa-prep/dist/
+npm run build        # the legacy root app; built in CI, not deployed
 ```
 
-Or drag-and-drop the `dist/` folder onto [app.netlify.com/drop](https://app.netlify.com/drop) — no CLI needed.
+> **Do not run `vercel --prod` by hand.** It goes around the entire pipeline —
+> no typecheck, no tests, no live verification. It is one of the two known
+> bypasses documented in `CI-CD.md`; the other is a redeploy triggered from
+> the Vercel dashboard.
 
-### Option 3 — GitHub Pages
+### Hosting it somewhere else
 
-```bash
-npm run build
-# Push the dist/ folder to a gh-pages branch, or use:
-npx gh-pages -d dist
-```
-
-### Option 4 — Any static host
-
-Build with `npm run build`, upload `dist/` contents to any web server (S3, Cloudflare Pages, your own nginx, etc.). Because `vite.config.ts` uses `base: "./"`, the build works at any path or subdomain.
+The output is a plain static bundle, so any static host works: build with
+`npm run build:site` and upload the contents of `qa-prep/dist/`. Nothing in
+the app needs a server, a database, or environment variables.
 
 ---
 

@@ -10,7 +10,7 @@ Workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ```
 push to main
-  ├─ test      typecheck · lint · unit tests · coverage · build · build:site
+  ├─ test      typecheck · unit tests · coverage · build · build:site
   ├─ qa-prep   typecheck · build · standalone guide
   └─ deploy    (needs both)
        ├─ POST the Vercel deploy hook

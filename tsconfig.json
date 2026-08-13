@@ -10,6 +10,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    /* Keep the incremental-build cache out of the repo root. */
+    "tsBuildInfoFile": "node_modules/.tmp/tsconfig-app/.tsbuildinfo",
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,

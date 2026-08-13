@@ -159,23 +159,18 @@ export default function App() {
     }));
   };
 
-  const toggleOpen = (id: string) => {
+  /** Flips an id in one of the persisted Set fields. */
+  const toggleId = (field: "openIds" | "commentsOpenIds", id: string) => {
     setState((p) => {
-      const next = new Set(p.openIds);
+      const next = new Set(p[field]);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return { ...p, openIds: next };
+      return { ...p, [field]: next };
     });
   };
 
-  const toggleComments = (id: string) => {
-    setState((p) => {
-      const next = new Set(p.commentsOpenIds);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return { ...p, commentsOpenIds: next };
-    });
-  };
+  const toggleOpen = (id: string) => toggleId("openIds", id);
+  const toggleComments = (id: string) => toggleId("commentsOpenIds", id);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -249,7 +244,10 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    /* The handler also calls setActiveCategory / toggleOpen / meta.*, which are
+       re-created each render. They're left out of the deps deliberately: every
+       one of them updates through a functional setter, so a stale closure can't
+       read stale state, and listing them would rebind the listener constantly. */
   }, [filtered, focusedIdx, isHome, focusSessionCatId]);
 
   const activeGroup = isInvestigationView

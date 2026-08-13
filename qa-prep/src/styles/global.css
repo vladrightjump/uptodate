@@ -574,7 +574,10 @@ input {
   font-size: 14px;
 }
 
-.prose ul.clauses code {
+/* The keyword column. Scoped to the first child on purpose: `li` is a flex
+   container, so a bare `code` selector would turn a mid-sentence tag into a
+   second fixed-width accent column instead of leaving it inline. */
+.prose ul.clauses > li > code:first-child {
   flex: none;
   width: 8rem;
   padding: 0;
@@ -769,7 +772,10 @@ table.data thead th {
     display: block;
   }
 
-  .prose ul.clauses code {
+  /* Only the leading keyword breaks onto its own line. A bare `code`
+     selector would also hit mid-sentence tags — e.g. `async`/`await` —
+     and split one clause across three rows. */
+  .prose ul.clauses > li > code:first-child {
     display: block;
     width: auto;
   }

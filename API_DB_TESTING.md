@@ -160,7 +160,7 @@ A migration is only as safe as the test that proves the backfill ran
 without lock contention on a representative row count. Run it against a
 copy of prod with `EXPLAIN (ANALYZE, BUFFERS)`.
 
-### Known issue still in `changes.md`
+### Known carry-forward issue
 
 > `useQuestionMeta.ts` uses `onConflict: "question_id"` but the SQL
 > migration creates a `(user_id, question_id)` composite unique index.
