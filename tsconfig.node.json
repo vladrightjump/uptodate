@@ -5,7 +5,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
-    "strict": true
+    "strict": true,
+    /* A composite project may not disable emit (TS6310), so send the output
+       somewhere disposable instead of littering the repo root with a
+       generated vite.config.js / .d.ts on every build. */
+    "outDir": "node_modules/.tmp/tsconfig-node",
+    "tsBuildInfoFile": "node_modules/.tmp/tsconfig-node/.tsbuildinfo"
   },
   "include": ["vite.config.ts"]
 }

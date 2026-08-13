@@ -110,9 +110,9 @@ or E2E test (Iteration 4d / 4b).
 | `npm run typecheck` | Hard gate; tests cannot mask type errors |
 | `npm run build` | Production build gate |
 
-CI (`.github/workflows/ci.yml`) runs typecheck → lint (soft) → test →
-coverage → build on Node 20 and 22. Concurrency cancellation prevents
-backed-up runs on rapid pushes.
+CI (`.github/workflows/ci.yml`) runs typecheck → test → coverage → build
+on Node 24, matching the Vercel build runtime. There is no lint step yet;
+adding ESLint is a proposal candidate.
 
 **Local pre-push.** `npm run typecheck && npm test` should pass before
 opening a PR. There is no enforced pre-push hook yet; adding one is a
@@ -153,9 +153,8 @@ reviewed in the next iteration retro — see Iteration 4e.
   baseline stabilises (proposal candidate).
 - **Trend.** Not yet tracked. When a defect-escape happens, the
   iteration retro should record: test count delta, coverage delta, and
-  any new `escape`-tagged issues. Until that habit forms, the
-  `changes.md` per-iteration "Verification" section is the lightweight
-  substitute.
+  any new `escape`-tagged issues. Until that habit forms, the CI run
+  summary for the iteration's merge commit is the lightweight substitute.
 
 ---
 
@@ -195,7 +194,6 @@ test, run `npm test`, attach the updated CI log to the PR.
 
 ## 9. Maintenance
 
-This plan is reviewed at the end of every iteration logged in
-`changes.md`. When a section becomes inaccurate (e.g. auth coming back,
-Playwright landing), update it in the same PR that lands the change —
-do not let the plan drift.
+This plan is reviewed at the end of every iteration. When a section
+becomes inaccurate (e.g. auth coming back, Playwright landing), update it
+in the same PR that lands the change — do not let the plan drift.

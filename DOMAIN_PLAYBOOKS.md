@@ -1,9 +1,8 @@
 # Domain Playbooks — Reference Appendix
 
-Only **one** domain playbook becomes in-app Qs (Chunk 3 of
-`TASK2_PLAN.md`) — the one matching your actual target role. The other
-two are held here as a reference outline. Promote one into an in-app
-chunk when target role shifts.
+Only **one** domain playbook becomes in-app Qs — the one matching your
+actual target role. The other two are held here as a reference outline.
+Promote one into the app when the target role shifts.
 
 ---
 

@@ -12,8 +12,13 @@ dist-ssr
 .vercel
 .netlify
 
-# TypeScript / Vite build artifacts
+# TypeScript build cache. tsc -b now emits into node_modules/.tmp
+# (see tsconfig.json / tsconfig.node.json), so these are only a safety net.
 *.tsbuildinfo
+
+# Kept deliberately: Vite resolves vite.config.js BEFORE vite.config.ts, so a
+# stale copy left over from a pre-outDir build would silently shadow the real
+# config for everyone if it were ever committed.
 vite.config.d.ts
 vite.config.js
 

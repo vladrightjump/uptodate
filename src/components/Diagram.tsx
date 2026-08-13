@@ -12,19 +12,15 @@ function loadMermaid() {
       m.initialize({
         startOnLoad: false,
         securityLevel: "strict",
-        theme: getMermaidTheme(),
+        // The app ships a single light ("modern") palette, so diagrams always
+        // use mermaid's light theme to stay visually consistent.
+        theme: "default",
         fontFamily: "inherit",
       });
       return m;
     });
   }
   return mermaidPromise;
-}
-
-function getMermaidTheme(): "default" | "dark" {
-  // The app uses a single light ("modern") palette, so diagrams always render
-  // with mermaid's light theme to stay visually consistent.
-  return "default";
 }
 
 export function Diagram({ source }: DiagramProps) {

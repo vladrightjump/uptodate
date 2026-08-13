@@ -39,7 +39,7 @@ Strategy follows from these facts, not from a generic template.
               ─────────────
                 ─────────       Unit (hooks, data integrity)
                 ▼
-              ─────────         Static (TS + lint) — runs first, fails fastest
+              ─────────         Static (TypeScript) — runs first, fails fastest
 ```
 
 Component tests are the widest band because:
@@ -59,8 +59,9 @@ Unit tests cluster around two narrow but high-leverage targets:
 - `integrity.test.ts` — content is the product; a broken question is a
   visible bug for every user.
 
-Static checks (`tsc --noEmit`, `eslint`) are the base of the trophy.
-They run first in CI and catch the cheapest class of bug.
+Static checking (`tsc --noEmit`, in strict mode) is the base of the
+trophy. It runs first in CI and catches the cheapest class of bug.
+ESLint is not wired up yet — a gap worth closing.
 
 ---
 

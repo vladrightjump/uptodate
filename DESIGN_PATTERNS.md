@@ -1,9 +1,8 @@
 # Design Patterns for Test Automation — Reference Appendix
 
-This file holds the **full ~40-pattern survey** from the original Task 2
-plan. It is **not** in the study app — the in-app Qs (Chunk 1 of
-`TASK2_PLAN.md`) cover only the 15 essentials. The rest live here so
-breadth is preserved without bloating the study set.
+This file holds the **full ~40-pattern survey**. It is **not** in the study
+app — the in-app design-patterns category covers only the 15 essentials.
+The rest live here so breadth is preserved without bloating the study set.
 
 Read this front-to-back **once** to map the landscape. Use the app's
 15-Q design-patterns category for repeated drilling.
