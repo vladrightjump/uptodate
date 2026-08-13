@@ -1,10 +1,14 @@
-/* Builds a single self-contained HTML file from the question data.
-   No network, no external assets — open the result straight from disk.
+/* Builds a single self-contained HTML file from the React app.
+
+   The app, React itself, the styles and the question data are all bundled
+   and inlined, so the result opens straight from disk with no network and
+   no external assets. There is only one implementation of the UI — this
+   file ships exactly what the deployed site runs.
 
    Usage: node scripts/build-standalone.mjs [outputPath]
 */
 import { build } from "esbuild";
-import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,29 +19,43 @@ const out = process.argv[2]
   ? resolve(process.argv[2])
   : resolve(root, "QA-Prep-standalone.html");
 
-/* 1 — compile the TypeScript question bank so we can import it here */
-const tmp = resolve(root, "node_modules/.tmp/rounds.mjs");
-await build({
+/* 1 — count the questions so the page (and CI) can assert the data shipped */
+const probe = await build({
   entryPoints: [resolve(root, "src/data/rounds.ts")],
-  outfile: tmp,
   bundle: true,
   format: "esm",
   platform: "neutral",
+  write: false,
 });
-const { ROUNDS } = await import(`${tmp}?t=${Date.now()}`);
-await rm(tmp, { force: true });
+const dataUrl =
+  "data:text/javascript;base64," +
+  Buffer.from(probe.outputFiles[0].text).toString("base64");
+const { ROUNDS, TOTAL_QUESTIONS } = await import(dataUrl);
 
-const total = ROUNDS.reduce((n, r) => n + r.questions.length, 0);
+/* 2 — bundle the real app: React, components, styles and data in one go */
+const bundle = await build({
+  entryPoints: [resolve(root, "src/main.tsx")],
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: ["es2020"],
+  minify: true,
+  jsx: "automatic",
+  /* Fonts become data: URIs so the file carries its own typography and needs
+     no network — which is also all the standalone's CSP allows. */
+  loader: { ".css": "css", ".woff2": "dataurl" },
+  define: { "process.env.NODE_ENV": '"production"' },
+  write: false,
+  outdir: resolve(root, "node_modules/.tmp/standalone"),
+});
 
-/* 2 — read the hand-written css / js */
-const css = await readFile(resolve(here, "standalone.css"), "utf8");
-const js = await readFile(resolve(here, "standalone.app.js"), "utf8");
+const js = bundle.outputFiles.find((f) => f.path.endsWith(".js"))?.text ?? "";
+const css = bundle.outputFiles.find((f) => f.path.endsWith(".css"))?.text ?? "";
+if (!js) throw new Error("esbuild produced no JS for the standalone build");
 
-/* `</script>` inside the data or the answers would close the tag early */
-const data = JSON.stringify(ROUNDS)
-  .replace(/</g, "\\u003c")
-  .replace(/\u2028/g, "\\u2028")
-  .replace(/\u2029/g, "\\u2029");
+/* A literal `</script` inside a string would close the tag early. Escaping the
+   slash is inert in JS ("<\/script" === "</script"), so the bundle still runs. */
+const safeJs = js.replace(/<\/script/gi, "<\\/script");
 
 const built = new Date().toLocaleDateString("en-GB", {
   day: "numeric",
@@ -46,79 +64,31 @@ const built = new Date().toLocaleDateString("en-GB", {
 });
 
 const html = `<!doctype html>
-<html lang="en" data-night="off">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QA Interview Prep</title>
-<meta name="description" content="${total} QA interview questions in four rounds, with model answers.">
+<meta name="description" content="${TOTAL_QUESTIONS} QA interview questions in ${ROUNDS.length} rounds, with model answers.">
+<!-- CI asserts this is present and non-zero, i.e. the build really shipped data. -->
+<meta name="qa-prep:questions" content="${TOTAL_QUESTIONS}">
+<meta name="qa-prep:built" content="${built}">
 <style>
 ${css}
 </style>
 </head>
 <body>
-
-<header class="masthead">
-  <div class="masthead-inner">
-    <div class="logo">
-      <h1>QA Interview Prep</h1>
-      <p>${total} questions &middot; four rounds &middot; model answers</p>
-    </div>
-    <div class="masthead-tools">
-      <div class="field">
-        <input id="search" type="search" placeholder="Search every question and answer" aria-label="Search questions and answers">
-      </div>
-      <div class="tool-group">
-        <span class="kicker">Level</span>
-        <button class="tool" data-diff="all" aria-pressed="true">all</button>
-        <button class="tool" data-diff="easy" aria-pressed="false">easy</button>
-        <button class="tool" data-diff="mid" aria-pressed="false">medium</button>
-        <button class="tool" data-diff="hard" aria-pressed="false">hard</button>
-      </div>
-      <div class="tool-group">
-        <button class="tool" id="hide-known">hide known</button>
-        <button class="tool" id="expand">expand all</button>
-        <button class="tool" id="night">night</button>
-      </div>
-    </div>
-  </div>
-</header>
-
-<div class="wrap">
-  <nav class="contents" aria-label="Contents">
-    <span class="kicker">Contents</span>
-    <ol id="toc"></ol>
-    <p class="contents-foot" id="tally"></p>
-    <div class="keys">
-      <kbd>/</kbd> search &nbsp; <kbd>1</kbd>–<kbd>4</kbd> round<br>
-      <kbd>e</kbd> expand all &nbsp; <kbd>n</kbd> night
-    </div>
-  </nav>
-
-  <main>
-    <div class="round-head" id="round-head"></div>
-    <ol class="entries" id="entries"></ol>
-  </main>
-</div>
-
-<footer class="colophon">
-  <hr>
-  Compiled ${built} &middot; answers are prompts for rehearsal, not scripts to recite &middot;
-  progress is stored in this browser only.
-</footer>
-
-<script>window.__ROUNDS__ = ${data};</script>
+<div id="root"></div>
 <script>
-${js}
+${safeJs}
 </script>
 </body>
 </html>
 `;
 
-/* The target directory may not exist — git does not track empty ones, so a
-   fresh clone has no public/ for the root prebuild hook to write into. */
+/* The target directory may not exist — git does not track empty ones. */
 await mkdir(dirname(out), { recursive: true });
 await writeFile(out, html, "utf8");
 console.log(
-  `wrote ${out} — ${total} questions, ${(html.length / 1024).toFixed(0)} KB`
+  `wrote ${out} — ${TOTAL_QUESTIONS} questions, ${(html.length / 1024).toFixed(0)} KB`
 );
