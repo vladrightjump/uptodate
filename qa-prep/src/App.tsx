@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { QuestionCard } from "./components/QuestionCard";
 import { Sidebar } from "./components/Sidebar";
-import { ROUNDS, TOTAL_QUESTIONS } from "./data/rounds";
+import { ALL_QUESTIONS, ROUNDS, TOTAL_QUESTIONS } from "./data/rounds";
 import { useIdSet, useLocalStorage } from "./hooks/useLocalStorage";
 import { useTheme } from "./hooks/useTheme";
 import type { DiffFilter, Question } from "./types";
@@ -71,7 +71,14 @@ export default function App() {
     else ids.forEach((id) => !opened.set.has(id) && opened.toggle(id));
   };
 
-  const donePct = Math.round((reviewed.size / TOTAL_QUESTIONS) * 100);
+  /* Count only ids that still exist. The question bank is hand-edited, so a
+     renamed or deleted id leaves an orphan in a returning user's storage —
+     counting those raw gives "45 of 41 (110%)" and overflows the progress bar. */
+  const doneCount = useMemo(
+    () => ALL_QUESTIONS.reduce((n, q) => n + (reviewed.set.has(q.id) ? 1 : 0), 0),
+    [reviewed.set]
+  );
+  const donePct = Math.round((doneCount / TOTAL_QUESTIONS) * 100);
 
   return (
     <div className="app">
@@ -142,8 +149,8 @@ export default function App() {
           <span style={{ width: `${donePct}%` }} />
         </div>
         <span className="progress-label">
-          {reviewed.size} of {TOTAL_QUESTIONS} marked known ({donePct}%)
-          {reviewed.size > 0 && (
+          {doneCount} of {TOTAL_QUESTIONS} marked known ({donePct}%)
+          {doneCount > 0 && (
             <button type="button" className="link" onClick={reviewed.clear}>
               reset
             </button>

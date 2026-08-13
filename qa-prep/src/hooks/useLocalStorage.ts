@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 /** Persisted state. Falls back to `initial` when storage is unavailable or corrupt. */
 export function useLocalStorage<T>(key: string, initial: T) {
@@ -25,7 +25,9 @@ export function useLocalStorage<T>(key: string, initial: T) {
 /** A persisted set of ids, with a toggle helper. */
 export function useIdSet(key: string) {
   const [ids, setIds] = useLocalStorage<string[]>(key, []);
-  const set = new Set(ids);
+  /* Memoised on purpose: callers put this Set in useMemo dependency lists, so
+     a fresh identity every render would silently defeat their memoisation. */
+  const set = useMemo(() => new Set(ids), [ids]);
 
   const toggle = useCallback(
     (id: string) =>

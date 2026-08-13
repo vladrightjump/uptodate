@@ -29,11 +29,18 @@ function fail(message) {
 const short = (sha) => sha.slice(0, 8);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* Node's fetch has no default timeout. Without this, an edge that accepts the
+   connection and then hangs leaves the await pending forever: the polling loop
+   never re-checks its deadline, TIMEOUT_MS is silently not honoured, and the
+   job dies on the workflow timeout with no useful diagnostic. */
+const PER_REQUEST_MS = 15_000;
+
 /* Cache-busted so we read the edge's current answer, not a stale copy. */
 async function fetchVersion() {
   const res = await fetch(`${site}/version.json?ci=${Date.now()}`, {
     cache: "no-store",
     headers: { "cache-control": "no-cache" },
+    signal: AbortSignal.timeout(PER_REQUEST_MS),
   });
   if (!res.ok) return { error: `HTTP ${res.status}` };
   const text = await res.text();
@@ -92,9 +99,15 @@ console.log(`Live: commit ${short(live.commit)}, built ${live.builtAt}.`);
 /* This file ships with the app, so a deploy that quietly stopped producing it
    should fail the pipeline. The app is bundled, so rather than grep for an
    internal symbol the build stamps a count in a meta tag and we assert it. */
-const guide = await fetch(`${site}/QA-Prep-standalone.html?ci=${Date.now()}`, {
-  cache: "no-store",
-});
+let guide;
+try {
+  guide = await fetch(`${site}/QA-Prep-standalone.html?ci=${Date.now()}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(PER_REQUEST_MS),
+  });
+} catch (err) {
+  fail(`Could not fetch the standalone study guide: ${err.message}`);
+}
 if (!guide.ok) {
   fail(`Standalone study guide is missing from the deploy (HTTP ${guide.status}).`);
 }
