@@ -131,12 +131,21 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Landscape on iOS otherwise inflates text on its own. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font: 600 15px/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
+  /* A long id, URL or table name in an answer must wrap rather than push the
+     page sideways on a narrow screen. */
+  overflow-wrap: break-word;
 }
 
 ::selection {
@@ -147,6 +156,22 @@ button,
 input {
   font: inherit;
   color: inherit;
+}
+
+button,
+label,
+input,
+summary {
+  /* No 300ms wait for a possible double-tap, and no grey flash on tap. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 :focus-visible {
@@ -167,10 +192,26 @@ input {
   align-items: center;
   justify-content: space-between;
   padding: 14px 28px;
+  /* Keeps the bar clear of the rounded corners and camera cutout in
+     landscape on a notched phone. */
+  padding-left: max(28px, env(safe-area-inset-left));
+  padding-right: max(28px, env(safe-area-inset-right));
   /* Translucent so content scrolling underneath stays faintly visible. */
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
+}
+
+.topbar-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .brand {
@@ -210,6 +251,13 @@ input {
 }
 
 .controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -284,9 +332,48 @@ input {
   transition: border-color 0.15s, color 0.15s;
 }
 
-.ghost:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
+/* Hover styling is gated on a real pointer: a touch browser keeps the hover
+   state stuck on the last thing you tapped, which reads as "still selected". */
+@media (hover: hover) {
+  .ghost:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+  }
+}
+
+.ghost:active {
+  background: var(--surface-2);
+}
+
+/* Square button for a single glyph — the theme toggle. */
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* The phone's collapsed filter row. Hidden until the narrow breakpoint. */
+.filter-toggle {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-count {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .link {
@@ -307,6 +394,8 @@ input {
   align-items: center;
   gap: 12px;
   padding: 10px 28px;
+  padding-left: max(28px, env(safe-area-inset-left));
+  padding-right: max(28px, env(safe-area-inset-right));
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
@@ -345,6 +434,8 @@ input {
   max-width: 1280px;
   margin: 0 auto;
   padding: 26px 28px 80px;
+  padding-left: max(28px, env(safe-area-inset-left));
+  padding-right: max(28px, env(safe-area-inset-right));
 }
 
 .sidebar {
@@ -403,7 +494,13 @@ input {
   background: oklch(var(--dot-l) var(--dot-c) var(--round-h, 250));
 }
 
-.round-btn:hover {
+@media (hover: hover) {
+  .round-btn:hover {
+    background: var(--surface-2);
+  }
+}
+
+.round-btn:active {
   background: var(--surface-2);
 }
 
@@ -505,8 +602,14 @@ input {
   transition: border-color 0.15s, transform 0.15s;
 }
 
-.card:hover {
-  border-color: var(--border-strong);
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--border-strong);
+  }
+}
+
+.card-toggle:active {
+  background: var(--surface-2);
 }
 
 .card.is-reviewed {
@@ -593,11 +696,14 @@ input {
 
 .reviewed-box {
   display: inline-flex;
-  gap: 5px;
+  gap: 6px;
   align-items: center;
   margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 999px;
   color: var(--text-faint);
   font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -721,6 +827,16 @@ input {
   margin-bottom: 12px;
 }
 
+/* Swiping a wide table or code block sideways must scroll that block, not
+   trigger the browser's back-swipe gesture. */
+.scroll,
+.table-wrap,
+.prose pre,
+.code pre {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .prose .scroll table.cmp {
   min-width: 30rem;
   margin-bottom: 0;
@@ -833,7 +949,14 @@ table.data thead th {
   cursor: pointer;
 }
 
-.copy:hover {
+@media (hover: hover) {
+  .copy:hover {
+    color: var(--text);
+  }
+}
+
+.copy:active {
+  background: var(--surface-2);
   color: var(--text);
 }
 
@@ -882,35 +1005,219 @@ table.data thead th {
   }
 }
 
+/* ---------- phone ----------
+
+   Two things drive this breakpoint. Vertical space: the header is sticky, so
+   every row it keeps costs you a row of questions on every screen — the
+   filters fold behind a button and the rounds shrink to a two-up grid.
+   And touch: controls grow to a thumb-sized target, and the indents that
+   align content under the question number are dropped so an answer, table or
+   code block gets the full width of the card.
+   ------------------------------------------------------------------------ */
+
 @media (max-width: 640px) {
-  .topbar,
-  .progress-strip {
-    padding-left: 16px;
-    padding-right: 16px;
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px 0 12px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
   }
 
-  .layout {
-    padding: 16px 16px 64px;
+  .topbar-main {
+    justify-content: space-between;
   }
 
-  .search {
-    width: 100%;
+  .brand strong {
+    font-size: 16px;
+  }
+
+  .filter-toggle {
+    display: inline-flex;
   }
 
   .controls {
     width: 100%;
+    gap: 10px;
   }
 
-  .card-meta,
-  .card-body,
-  .table-wrap,
-  .card > .code {
-    padding-left: 16px;
-    margin-left: 0;
+  .search {
+    width: 100%;
+    padding: 12px 14px;
+    /* 16px exactly: below that, Safari zooms the whole page on focus and
+       leaves it zoomed. */
+    font-size: 16px;
+  }
+
+  /* Collapsed by default; the "filters" button in the header opens it. */
+  .filter-row {
+    display: none;
+  }
+
+  .filter-row.is-open {
+    display: flex;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .segmented {
+    flex-basis: 100%;
+    padding: 4px;
+  }
+
+  .segmented button {
+    flex: 1;
+    padding: 9px 4px;
+    font-size: 12.5px;
+  }
+
+  .filter-row .switch {
+    flex: 1;
+    padding: 8px 2px;
+    font-size: 13.5px;
+  }
+
+  .filter-row .ghost {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  .progress-strip {
+    gap: 10px;
+    padding: 8px 0;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+
+  .progress-label {
+    font-size: 11px;
+  }
+
+  .layout {
+    padding: 14px 0 56px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(56px, env(safe-area-inset-bottom));
+  }
+
+  /* The tiles carry their own edges from 900px down, so the panel around
+     them is just spending width and height. */
+  .sidebar {
+    padding: 0;
+    background: none;
+    border: 0;
+  }
+
+  /* The <nav> is already labelled "Interview rounds" for screen readers, and
+     "Round A/B/C/D" speaks for itself on screen. */
+  .sidebar-title {
+    display: none;
+  }
+
+  .sidebar ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .round-btn {
+    padding: 9px 10px 10px 21px;
+  }
+
+  .round-btn::before {
+    top: 13px;
+  }
+
+  .round-label {
+    font-size: 12.5px;
+    line-height: 1.3;
+  }
+
+  .round-count {
+    font-size: 10.5px;
+  }
+
+  .round-bar {
+    margin-top: 6px;
+  }
+
+  .content-head h1 {
+    font-size: 21px;
+  }
+
+  .content-head p {
+    margin-bottom: 16px;
+    font-size: 13.5px;
+  }
+
+  .cards > li {
+    margin-bottom: 10px;
+  }
+
+  .card {
+    border-radius: 16px;
+  }
+
+  .card-toggle {
+    gap: 8px;
+    padding: 14px 14px 8px;
+  }
+
+  .card-num {
+    min-width: 16px;
+    font-size: 10.5px;
+  }
+
+  .card-q {
+    font-size: 15.5px;
+  }
+
+  .card-chevron {
+    width: 26px;
+    font-size: 20px;
+  }
+
+  .card-meta {
+    gap: 6px;
+    padding: 0 14px 10px;
+  }
+
+  .reviewed-box {
+    padding: 6px 10px;
   }
 
   .card-body {
-    padding-left: 16px;
+    padding: 8px 14px 16px;
+  }
+
+  .table-wrap,
+  .card > .code {
+    margin: 0 14px 12px;
+  }
+
+  .prose {
+    font-size: 15px;
+  }
+
+  .prose code,
+  .prose pre code,
+  .code code {
+    font-size: 12px;
+  }
+
+  .code figcaption {
+    padding: 8px 12px;
+  }
+
+  .copy {
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
+
+  table.data th,
+  table.data td {
+    padding: 5px 9px;
+    font-size: 12px;
   }
 
   .prose ul.clauses > li {
@@ -923,5 +1230,49 @@ table.data thead th {
   .prose ul.clauses > li > code:first-child {
     display: block;
     width: auto;
+  }
+}
+
+/* ---------- small phones (iPhone SE and friends) ---------- */
+
+@media (max-width: 360px) {
+  /* The question count wraps to a second line here and pushes the header
+     taller for information the rounds already carry. */
+  .brand-sub {
+    display: none;
+  }
+
+  .segmented button {
+    padding: 9px 2px;
+    font-size: 12px;
+  }
+
+  .card-toggle,
+  .card-meta,
+  .card-body {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .table-wrap,
+  .card > .code {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+}
+
+/* Landscape on a phone leaves so little height that a sticky header would
+   own most of the screen — let it scroll away instead. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .topbar {
+    position: static;
+  }
+
+  /* A big phone in landscape (a 14 Pro Max is 932px wide) is past the 900px
+     breakpoint, so it keeps the desktop sidebar — whose 116px sticky offset
+     was measured against a sticky topbar that no longer is one. Left alone
+     it would pin the round list a quarter of the way down the screen. */
+  .sidebar {
+    position: static;
   }
 }

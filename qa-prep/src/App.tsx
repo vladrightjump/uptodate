@@ -14,6 +14,17 @@ const DIFF_FILTER_LABEL: Record<DiffFilter, string> = {
   hard: "hard",
 };
 
+/** Jumps back to the top after a navigation. jsdom has no real scrolling. */
+function scrollToTop() {
+  if (typeof window.scrollTo !== "function") return;
+  const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  try {
+    window.scrollTo({ top: 0, behavior: still ? "auto" : "smooth" });
+  } catch {
+    /* older or headless browsers — the jump is a nicety, not a requirement */
+  }
+}
+
 /** Strips the HTML in an answer so search matches on the words, not the markup. */
 function searchableText(q: Question): string {
   const solutions = (q.solution ?? []).map((s) => s.src).join(" ");
@@ -36,6 +47,9 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [diff, setDiff] = useState<DiffFilter>("all");
   const [hideKnown, setHideKnown] = useState(false);
+  /* Phone-only: the filter row is collapsed behind a button so the sticky
+     header stays short. Wider screens show the row and ignore this. */
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const reviewed = useIdSet("qa-prep:reviewed");
   const opened = useIdSet("qa-prep:open");
@@ -62,6 +76,10 @@ export default function App() {
     });
   }, [searching, query, activeRound, diff, hideKnown, reviewed.set]);
 
+  /* Shown on the phone's "filters" button, so a filter hiding questions is
+     still visible once the row it lives in is collapsed. */
+  const activeFilters = (diff === "all" ? 0 : 1) + (hideKnown ? 1 : 0);
+
   const allOpen =
     visible.length > 0 && visible.every(({ q }) => opened.set.has(q.id));
 
@@ -83,16 +101,51 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            QA
-          </span>
-          <span>
-            <strong>Interview Prep</strong>
-            <span className="brand-sub">
-              {TOTAL_QUESTIONS} questions · 4 rounds
+        <div className="topbar-main">
+          <div className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              QA
             </span>
-          </span>
+            <span>
+              <strong>Interview Prep</strong>
+              <span className="brand-sub">
+                {TOTAL_QUESTIONS} questions · {ROUNDS.length} rounds
+              </span>
+            </span>
+          </div>
+
+          <div className="topbar-actions">
+            <button
+              type="button"
+              className="ghost icon-btn"
+              onClick={cycle}
+              title={`Theme: ${theme}`}
+              aria-label={`Theme: ${theme}. Click to change.`}
+            >
+              {theme === "auto" ? "◐" : theme === "light" ? "☀" : "☾"}
+            </button>
+
+            {/* Phone only — hidden by the stylesheet from 641px up. */}
+            <button
+              type="button"
+              className="ghost filter-toggle"
+              aria-expanded={filtersOpen}
+              aria-controls="filter-row"
+              aria-label={
+                activeFilters > 0
+                  ? `Filters, ${activeFilters} active`
+                  : "Filters"
+              }
+              onClick={() => setFiltersOpen((o) => !o)}
+            >
+              filters
+              {activeFilters > 0 && (
+                <span className="filter-count" aria-hidden="true">
+                  {activeFilters}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="controls">
@@ -103,44 +156,47 @@ export default function App() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search questions and answers"
+            enterKeyHint="search"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
           />
 
-          <div className="segmented" role="group" aria-label="Filter by difficulty">
-            {DIFF_FILTERS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                className={diff === d ? "is-active" : ""}
-                aria-pressed={diff === d}
-                onClick={() => setDiff(d)}
-              >
-                {DIFF_FILTER_LABEL[d]}
-              </button>
-            ))}
-          </div>
-
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={hideKnown}
-              onChange={(e) => setHideKnown(e.target.checked)}
-            />
-            <span>hide known</span>
-          </label>
-
-          <button type="button" className="ghost" onClick={toggleAll}>
-            {allOpen ? "collapse all" : "expand all"}
-          </button>
-
-          <button
-            type="button"
-            className="ghost"
-            onClick={cycle}
-            title={`Theme: ${theme}`}
-            aria-label={`Theme: ${theme}. Click to change.`}
+          <div
+            className={`filter-row${filtersOpen ? " is-open" : ""}`}
+            id="filter-row"
           >
-            {theme === "auto" ? "◐" : theme === "light" ? "☀" : "☾"}
-          </button>
+            <div
+              className="segmented"
+              role="group"
+              aria-label="Filter by difficulty"
+            >
+              {DIFF_FILTERS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  className={diff === d ? "is-active" : ""}
+                  aria-pressed={diff === d}
+                  onClick={() => setDiff(d)}
+                >
+                  {DIFF_FILTER_LABEL[d]}
+                </button>
+              ))}
+            </div>
+
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={hideKnown}
+                onChange={(e) => setHideKnown(e.target.checked)}
+              />
+              <span>hide known</span>
+            </label>
+
+            <button type="button" className="ghost" onClick={toggleAll}>
+              {allOpen ? "collapse all" : "expand all"}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -166,6 +222,9 @@ export default function App() {
           onSelect={(id) => {
             setActiveRoundId(id);
             setSearch("");
+            /* On a phone the round tiles sit above the list, so switching
+               rounds would otherwise leave you mid-list in the new round. */
+            scrollToTop();
           }}
         />
 
