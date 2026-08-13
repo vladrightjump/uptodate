@@ -707,6 +707,164 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
+/* ---------- notes ---------- */
+
+.note-btn {
+  padding: 4px 10px;
+  background: none;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+@media (hover: hover) {
+  .note-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+
+/* A written note earns a solid border — you can see at a glance which
+   questions you've annotated without opening anything. */
+.note-btn.has-note {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.note-block {
+  margin: 0 18px 14px 52px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.note-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.55;
+  /* Notes are typed by hand, so honour the line breaks as written. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-input {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.note-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.primary-sm {
+  padding: 8px 15px;
+  background: var(--accent);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.primary-sm:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.note-delete {
+  color: var(--hard);
+}
+
+.note-hint {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- sync indicator ---------- */
+
+.sync {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 10px;
+}
+
+.sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.sync-synced .sync-dot {
+  background: var(--easy);
+}
+
+.sync-offline .sync-dot {
+  background: var(--mid);
+}
+
+.sync-loading .sync-dot {
+  animation: sync-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes sync-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-loading .sync-dot {
+    animation: none;
+  }
+}
+
+/* Announced to screen readers, invisible on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .card-body {
   padding: 4px 18px 18px 52px;
   border-top: 1px dashed var(--border);
@@ -1184,6 +1342,16 @@ table.data thead th {
 
   .reviewed-box {
     padding: 6px 10px;
+  }
+
+  /* Big enough to hit with a thumb, and no longer indented to the answer's
+     text column — on a phone the card runs edge to edge. */
+  .note-btn {
+    padding: 6px 12px;
+  }
+
+  .note-block {
+    margin: 0 14px 12px;
   }
 
   .card-body {

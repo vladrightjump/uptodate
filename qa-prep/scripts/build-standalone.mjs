@@ -44,7 +44,16 @@ const bundle = await build({
   /* Fonts become data: URIs so the file carries its own typography and needs
      no network — which is also all the standalone's CSP allows. */
   loader: { ".css": "css", ".woff2": "dataurl" },
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: {
+    "process.env.NODE_ENV": '"production"',
+    /* No import.meta in an IIFE, and no network either — the standalone's CSP
+       is connect-src 'none'. Blanking the Supabase config makes src/lib/db.ts
+       report itself unconfigured, so the app keeps everything in localStorage
+       and never tries to sync. It also keeps the key out of a file people
+       email around. */
+    "import.meta.env.VITE_SUPABASE_URL": '""',
+    "import.meta.env.VITE_SUPABASE_ANON_KEY": '""',
+  },
   write: false,
   outdir: resolve(root, "node_modules/.tmp/standalone"),
 });

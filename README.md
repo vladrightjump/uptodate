@@ -157,6 +157,32 @@ self-hosted fonts into one HTML file that opens straight from disk with no
 network access. There is exactly one implementation of the UI — the guide
 ships what the site runs, so the two cannot drift.
 
+### Saved progress and notes
+
+Marking a question **known**, and the one free-text **note** each question
+can carry, are written to `localStorage` first — so the UI never waits on a
+network and works offline — and then mirrored to Supabase.
+
+There is no login. The first run generates a random uuid, keeps it in
+`localStorage` as the device id, and sends it with every call. Sync is
+therefore per-browser: it survives a redeploy and a new laptop if you carry
+the id, but clearing site data starts fresh.
+
+Set up sync by copying `qa-prep/.env.example` to `qa-prep/.env.local` and
+filling in both values (the same two go in Vercel's environment variables).
+**Changing the project host means editing `vercel.json` as well** — its CSP
+`connect-src` pins that one Supabase host, so a mismatched `VITE_SUPABASE_URL`
+is blocked by the browser and shows up only as a stuck amber sync dot.
+**Leave them unset and everything still works** — `dbConfigured` is false,
+nothing is sent, and state stays local. That is exactly what the standalone
+build does: `build-standalone.mjs` blanks both at bundle time, so the single
+HTML file carries no key and never reaches the network.
+
+The schema lives in `supabase/migrations/`. Both tables have RLS enabled and
+**no policies**, so the anon key cannot read or write them directly; the five
+`security definer` procedures are the only way in, and each one requires the
+device id. See the header comment in the migration for the threat model.
+
 The app at the repo root is the **legacy** one. It is no longer deployed,
 but is still typechecked, tested, and built in CI so it cannot rot
 unnoticed while it lives here.
