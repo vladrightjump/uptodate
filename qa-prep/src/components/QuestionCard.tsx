@@ -1,13 +1,20 @@
+import { useState } from "react";
+import type { Note } from "../hooks/useQuestionState";
 import type { Question } from "../types";
 import { CodeBlock } from "./CodeBlock";
+import { NoteEditor } from "./NoteEditor";
 
 interface Props {
   question: Question;
   index: number;
   open: boolean;
   reviewed: boolean;
+  /** Undefined when this question has no note yet. */
+  note?: Note;
   onToggleOpen: (id: string) => void;
   onToggleReviewed: (id: string) => void;
+  onSaveNote: (id: string, body: string) => void;
+  onDeleteNote: (id: string) => void;
 }
 
 const DIFF_LABEL: Record<Question["diff"], string> = {
@@ -21,10 +28,14 @@ export function QuestionCard({
   index,
   open,
   reviewed,
+  note,
   onToggleOpen,
   onToggleReviewed,
+  onSaveNote,
+  onDeleteNote,
 }: Props) {
   const answerId = `answer-${question.id}`;
+  const [editing, setEditing] = useState(false);
 
   return (
     <article className={`card${reviewed ? " is-reviewed" : ""}`}>
@@ -60,8 +71,35 @@ export function QuestionCard({
             />
             <span>known</span>
           </label>
+
+          <button
+            type="button"
+            className={`note-btn${note ? " has-note" : ""}`}
+            aria-expanded={editing}
+            onClick={() => setEditing((e) => !e)}
+          >
+            {note ? "edit note" : "add note"}
+          </button>
         </div>
       </div>
+
+      {/* Your own words, so they stay visible whether or not the model answer
+          is expanded. */}
+      {(note || editing) && (
+        <div className="note-block">
+          {editing ? (
+            <NoteEditor
+              questionId={question.id}
+              initial={note?.body ?? ""}
+              onSave={(body) => onSaveNote(question.id, body)}
+              onDelete={() => onDeleteNote(question.id)}
+              onClose={() => setEditing(false)}
+            />
+          ) : (
+            <p className="note-text">{note!.body}</p>
+          )}
+        </div>
+      )}
 
       {question.table && (
         <div className="table-wrap">

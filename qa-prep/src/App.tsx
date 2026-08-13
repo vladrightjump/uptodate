@@ -3,10 +3,21 @@ import { QuestionCard } from "./components/QuestionCard";
 import { Sidebar } from "./components/Sidebar";
 import { ALL_QUESTIONS, ROUNDS, TOTAL_QUESTIONS } from "./data/rounds";
 import { useIdSet, useLocalStorage } from "./hooks/useLocalStorage";
+import { useQuestionState, type SyncStatus } from "./hooks/useQuestionState";
 import { useTheme } from "./hooks/useTheme";
 import type { DiffFilter, Question } from "./types";
 
 const DIFF_FILTERS: DiffFilter[] = ["all", "easy", "mid", "hard"];
+
+/* Deliberately quiet. Sync is a background nicety here — every edit is already
+   safe in localStorage — so it gets a dot and a tooltip, not a banner. */
+const SYNC_LABEL: Record<SyncStatus, string> = {
+  off: "Saved on this device only",
+  loading: "Syncing…",
+  synced: "Synced",
+  offline: "Offline — saved here, will sync later",
+};
+
 const DIFF_FILTER_LABEL: Record<DiffFilter, string> = {
   all: "all",
   easy: "easy",
@@ -51,7 +62,15 @@ export default function App() {
      header stays short. Wider screens show the row and ignore this. */
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const reviewed = useIdSet("qa-prep:reviewed");
+  const {
+    known,
+    notes,
+    status: syncStatus,
+    toggleKnown,
+    clearKnown,
+    saveNote,
+    deleteNote,
+  } = useQuestionState();
   const opened = useIdSet("qa-prep:open");
   const { theme, cycle } = useTheme();
 
@@ -70,11 +89,11 @@ export default function App() {
 
     return pool.filter(({ q }) => {
       if (diff !== "all" && q.diff !== diff) return false;
-      if (hideKnown && reviewed.set.has(q.id)) return false;
+      if (hideKnown && known.has(q.id)) return false;
       if (searching && !searchableText(q).includes(query)) return false;
       return true;
     });
-  }, [searching, query, activeRound, diff, hideKnown, reviewed.set]);
+  }, [searching, query, activeRound, diff, hideKnown, known]);
 
   /* Shown on the phone's "filters" button, so a filter hiding questions is
      still visible once the row it lives in is collapsed. */
@@ -93,8 +112,8 @@ export default function App() {
      renamed or deleted id leaves an orphan in a returning user's storage —
      counting those raw gives "45 of 41 (110%)" and overflows the progress bar. */
   const doneCount = useMemo(
-    () => ALL_QUESTIONS.reduce((n, q) => n + (reviewed.set.has(q.id) ? 1 : 0), 0),
-    [reviewed.set]
+    () => ALL_QUESTIONS.reduce((n, q) => n + (known.has(q.id) ? 1 : 0), 0),
+    [known]
   );
   const donePct = Math.round((doneCount / TOTAL_QUESTIONS) * 100);
 
@@ -207,18 +226,28 @@ export default function App() {
         <span className="progress-label">
           {doneCount} of {TOTAL_QUESTIONS} marked known ({donePct}%)
           {doneCount > 0 && (
-            <button type="button" className="link" onClick={reviewed.clear}>
+            <button type="button" className="link" onClick={clearKnown}>
               reset
             </button>
           )}
         </span>
+
+        {syncStatus !== "off" && (
+          <span
+            className={`sync sync-${syncStatus}`}
+            title={SYNC_LABEL[syncStatus]}
+          >
+            <span className="sync-dot" aria-hidden="true" />
+            <span className="sr-only">{SYNC_LABEL[syncStatus]}</span>
+          </span>
+        )}
       </div>
 
       <div className="layout">
         <Sidebar
           rounds={ROUNDS}
           activeId={activeRound.id}
-          reviewed={reviewed.set}
+          reviewed={known}
           onSelect={(id) => {
             setActiveRoundId(id);
             setSearch("");
@@ -248,9 +277,12 @@ export default function App() {
                     question={q}
                     index={i + 1}
                     open={opened.set.has(q.id)}
-                    reviewed={reviewed.set.has(q.id)}
+                    reviewed={known.has(q.id)}
+                    note={notes.get(q.id)}
                     onToggleOpen={opened.toggle}
-                    onToggleReviewed={reviewed.toggle}
+                    onToggleReviewed={toggleKnown}
+                    onSaveNote={saveNote}
+                    onDeleteNote={deleteNote}
                   />
                 </li>
               ))}
