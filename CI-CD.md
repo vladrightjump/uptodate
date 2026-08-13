@@ -71,8 +71,10 @@ tick. So:
   (`VERCEL_GIT_COMMIT_SHA` on Vercel, `git rev-parse` locally).
 - `scripts/check-live-deploy.mjs` polls `https://<site>/version.json` every 10s
   for up to 5 minutes and fails if the SHA never becomes the one CI pushed.
-- It then checks `/QA-Prep-standalone.html` is served and still contains its
-  question data, since the standalone guide is generated during the same build.
+- It then checks `/QA-Prep-standalone.html` is served, carries a non-zero
+  `qa-prep:questions` count in its meta tags, and still has its mount point.
+  The guide is generated during the same build, so a build that silently
+  stopped producing it fails here rather than reaching users.
 
 A failed Vercel build never swaps the domain alias, so it surfaces here as a
 timeout with a pointer to the deployment logs.
