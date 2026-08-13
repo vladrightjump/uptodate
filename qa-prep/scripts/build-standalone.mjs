@@ -67,7 +67,8 @@ const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fbf6ef">
 <title>QA Interview Prep</title>
 <meta name="description" content="${TOTAL_QUESTIONS} QA interview questions in ${ROUNDS.length} rounds, with model answers.">
 <!-- CI asserts this is present and non-zero, i.e. the build really shipped data. -->
