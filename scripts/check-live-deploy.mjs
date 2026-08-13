@@ -89,8 +89,9 @@ if (!live) {
 
 console.log(`Live: commit ${short(live.commit)}, built ${live.builtAt}.`);
 
-/* The whole point of the prebuild hook is that this file ships with the app,
-   so a deploy that quietly stopped producing it should fail the pipeline. */
+/* This file ships with the app, so a deploy that quietly stopped producing it
+   should fail the pipeline. The app is bundled, so rather than grep for an
+   internal symbol the build stamps a count in a meta tag and we assert it. */
 const guide = await fetch(`${site}/QA-Prep-standalone.html?ci=${Date.now()}`, {
   cache: "no-store",
 });
@@ -99,11 +100,20 @@ if (!guide.ok) {
 }
 
 const body = await guide.text();
-if (!body.includes("window.__ROUNDS__")) {
-  fail("Standalone study guide is served but has no question data in it.");
+const stamped = body.match(
+  /<meta name="qa-prep:questions" content="(\d+)"/
+);
+if (!stamped) {
+  fail("Standalone study guide is served but carries no question-count stamp.");
+}
+if (Number(stamped[1]) === 0) {
+  fail("Standalone study guide is served but reports zero questions.");
+}
+if (!body.includes('<div id="root">')) {
+  fail("Standalone study guide is served but has no mount point.");
 }
 
 console.log(
-  `Standalone study guide is live (${(body.length / 1024).toFixed(0)} KB).`
+  `Standalone study guide is live (${stamped[1]} questions, ${(body.length / 1024).toFixed(0)} KB).`
 );
 console.log("Deploy verified.");
