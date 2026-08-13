@@ -272,6 +272,11 @@ input {
   position: sticky;
   top: 110px;
   align-self: start;
+  min-width: 0;
+}
+
+.content {
+  min-width: 0;
 }
 
 .sidebar-title {
@@ -543,6 +548,54 @@ input {
   line-height: 1.6;
 }
 
+/* "Say this:" — the sentence to actually say out loud */
+.prose p.say {
+  margin: 12px 0 14px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  font-size: 15px;
+}
+
+/* clause-by-clause breakdown of a query or script */
+.prose ul.clauses {
+  margin: 10px 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.prose ul.clauses > li {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.prose ul.clauses code {
+  flex: none;
+  width: 8rem;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* horizontal scroll container for anything wider than the column */
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+
+.prose .scroll table.cmp {
+  min-width: 30rem;
+  margin-bottom: 0;
+}
+
 /* comparison table inside answers (GET/POST/PUT) */
 .prose table.cmp {
   width: 100%;
@@ -669,7 +722,9 @@ table.data thead th {
 
 @media (max-width: 900px) {
   .layout {
-    grid-template-columns: 1fr;
+    /* minmax(0,…) not 1fr: a 1fr track has min-width:auto, so a wide table
+       or code block would stretch the whole page past the screen. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
 
@@ -708,5 +763,14 @@ table.data thead th {
 
   .card-body {
     padding-left: 16px;
+  }
+
+  .prose ul.clauses > li {
+    display: block;
+  }
+
+  .prose ul.clauses code {
+    display: block;
+    width: auto;
   }
 }

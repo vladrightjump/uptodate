@@ -222,6 +222,11 @@ input {
   position: sticky;
   top: 96px;
   align-self: start;
+  min-width: 0;
+}
+
+main {
+  min-width: 0;
 }
 
 .contents > .kicker {
@@ -580,7 +585,7 @@ input {
   background: var(--paper-2);
   font-family: var(--mono);
   font-size: 0.82em;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .prose pre {
@@ -597,6 +602,48 @@ input {
   font-size: 12.5px;
   line-height: 1.7;
   white-space: pre;
+}
+
+/* "Say this:" — the sentence to actually say out loud */
+.prose p.say {
+  margin: 0 0 16px;
+  padding: 10px 0 10px 16px;
+  border-left: 2px solid var(--accent);
+  font-size: 17px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* clause-by-clause breakdown of a query or script */
+.prose ul.clauses {
+  margin: 6px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.prose ul.clauses > li {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule-soft);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.prose ul.clauses > li::before {
+  content: none;
+}
+
+.prose ul.clauses code {
+  flex: none;
+  width: 8.5rem;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  line-height: 1.75;
+  white-space: nowrap;
 }
 
 /* comparison table inside an answer */
@@ -632,6 +679,21 @@ input {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.03em;
+}
+
+/* horizontal scroll container for anything wider than the column */
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.prose .scroll {
+  margin-bottom: 16px;
+}
+
+.prose .scroll table.cmp {
+  min-width: 30rem;
+  margin-bottom: 0;
 }
 
 /* ------------------------------------------------- figures: tables & code */
@@ -760,7 +822,9 @@ table.data thead th {
 
 @media (max-width: 900px) {
   .wrap {
-    grid-template-columns: 1fr;
+    /* minmax(0,…) not 1fr: a 1fr track has min-width:auto, so a wide table
+       or code block would stretch the whole page past the screen. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 32px;
     padding: 28px 22px 90px;
   }
@@ -805,6 +869,16 @@ table.data thead th {
 
   .round-head h2 {
     font-size: 27px;
+  }
+
+  .prose ul.clauses > li {
+    display: block;
+  }
+
+  .prose ul.clauses code {
+    display: block;
+    width: auto;
+    margin-bottom: 1px;
   }
 }
 
