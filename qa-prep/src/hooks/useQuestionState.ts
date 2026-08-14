@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { db, dbConfigured } from "../lib/db";
+import { db, dbConfigured, type StoredStatus } from "../lib/db";
 import { getDeviceId } from "../lib/deviceId";
 
-/* Which questions you've marked known, and your note on each — held in
+/* Where each question sits in the study pass, and your note on it — held in
  * localStorage for an instant, offline-proof UI, and mirrored to Supabase so
  * the state survives this browser.
  *
@@ -23,24 +23,29 @@ export type SyncStatus =
   /** Reachable but something failed, or we're offline. Edits still stick locally. */
   | "offline";
 
+/** Exactly one of these per question. "new" is the absence of a stored row. */
+export type QuestionStatus = "new" | StoredStatus;
+
 export interface Note {
   body: string;
   updated_at: string;
 }
 
-/* Same key the old useIdSet used, so anyone mid-way through the question bank
-   keeps their progress and gets it pushed up on the first sync. */
-const KNOWN_KEY = "qa-prep:reviewed";
+const STATUS_KEY = "qa-prep:status";
+/* The old shape was a flat list of "reviewed" ids under this key. It predates
+   the three-state model and is folded in once, on read. */
+const LEGACY_KNOWN_KEY = "qa-prep:reviewed";
 const NOTES_KEY = "qa-prep:notes";
-const PENDING_KEY = "qa-prep:pending";
-const SEEDED_KEY = "qa-prep:pending-seeded";
+/* v2: the pending buckets were {known, notes} before statuses existed. */
+const PENDING_KEY = "qa-prep:pending-v2";
+const SEEDED_KEY = "qa-prep:pending-seeded-v2";
 
 interface Pending {
-  known: string[];
+  status: string[];
   notes: string[];
 }
 
-const NO_PENDING: Pending = { known: [], notes: [] };
+const NO_PENDING: Pending = { status: [], notes: [] };
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -59,9 +64,42 @@ function write(key: string, value: unknown): void {
   }
 }
 
-function readKnown(): Set<string> {
-  const ids = read<string[]>(KNOWN_KEY, []);
-  return new Set(Array.isArray(ids) ? ids.filter((v) => typeof v === "string") : []);
+function isStored(v: unknown): v is StoredStatus {
+  return v === "review" || v === "known";
+}
+
+/** Reads the status map, folding in the old flat "reviewed" list once. */
+function readStatuses(): Map<string, StoredStatus> {
+  const map = new Map<string, StoredStatus>();
+
+  const raw = read<Record<string, unknown>>(STATUS_KEY, {});
+  if (raw && typeof raw === "object") {
+    for (const [id, value] of Object.entries(raw)) {
+      if (isStored(value)) map.set(id, value);
+    }
+  }
+
+  /* Anyone who used the app before "review" existed had every marked question
+     stored as simply reviewed, which meant "known". Their newer three-state
+     edits win, so this only fills gaps. */
+  const legacy = read<string[]>(LEGACY_KNOWN_KEY, []);
+  if (Array.isArray(legacy)) {
+    for (const id of legacy) {
+      if (typeof id === "string" && !map.has(id)) map.set(id, "known");
+    }
+  }
+
+  return map;
+}
+
+function writeStatuses(map: Map<string, StoredStatus>): void {
+  write(STATUS_KEY, Object.fromEntries(map));
+  /* Kept in step so a browser that reads the legacy key — or a rollback to the
+     previous build — cannot resurrect ids the user has since cleared. */
+  write(
+    LEGACY_KNOWN_KEY,
+    [...map].filter(([, s]) => s === "known").map(([id]) => id)
+  );
 }
 
 function readNotes(): Map<string, Note> {
@@ -79,7 +117,7 @@ function readNotes(): Map<string, Note> {
 function readPending(): Pending {
   const p = read<Pending>(PENDING_KEY, NO_PENDING);
   return {
-    known: Array.isArray(p?.known) ? p.known : [],
+    status: Array.isArray(p?.status) ? p.status : [],
     notes: Array.isArray(p?.notes) ? p.notes : [],
   };
 }
@@ -103,56 +141,56 @@ function clearPending(bucket: keyof Pending, id: string): void {
 
 function nothingPending(): boolean {
   const p = readPending();
-  return p.known.length === 0 && p.notes.length === 0;
+  return p.status.length === 0 && p.notes.length === 0;
 }
 
 /* First run against a database: everything already in this browser is
    unsynced by definition. Without this, the initial load would find an empty
    server and wipe progress made before the DB existed. */
-function seedPendingOnce(known: Set<string>, notes: Map<string, Note>): void {
+function seedPendingOnce(
+  statuses: Map<string, StoredStatus>,
+  notes: Map<string, Note>
+): void {
   if (read<string | null>(SEEDED_KEY, null)) return;
-  write(PENDING_KEY, { known: [...known], notes: [...notes.keys()] });
+  write(PENDING_KEY, { status: [...statuses.keys()], notes: [...notes.keys()] });
   write(SEEDED_KEY, "1");
 }
 
 export interface QuestionState {
-  known: Set<string>;
+  /** Only non-"new" questions appear. Use `statusOf` for the full picture. */
+  statuses: Map<string, StoredStatus>;
+  statusOf: (questionId: string) => QuestionStatus;
   notes: Map<string, Note>;
-  status: SyncStatus;
-  toggleKnown: (questionId: string) => void;
-  clearKnown: () => void;
+  sync: SyncStatus;
+  setStatus: (questionId: string, status: QuestionStatus) => void;
+  clearAll: () => void;
   saveNote: (questionId: string, body: string) => void;
   deleteNote: (questionId: string) => void;
 }
 
 export function useQuestionState(): QuestionState {
-  const [known, setKnown] = useState<Set<string>>(readKnown);
+  const [statuses, setStatuses] = useState<Map<string, StoredStatus>>(readStatuses);
   const [notes, setNotes] = useState<Map<string, Note>>(readNotes);
-  const [status, setStatus] = useState<SyncStatus>(
-    dbConfigured ? "loading" : "off"
-  );
+  const [sync, setSync] = useState<SyncStatus>(dbConfigured ? "loading" : "off");
 
   /* Callbacks need today's value without being rebuilt on every change, which
      would re-render every card in the list. */
-  const knownRef = useRef(known);
+  const statusesRef = useRef(statuses);
   const notesRef = useRef(notes);
-  knownRef.current = known;
+  statusesRef.current = statuses;
   notesRef.current = notes;
 
   /* Questions edited since the initial load was issued. The server's answer
      was decided before those edits existed, so it must not speak for them. */
-  const touched = useRef<{ known: Set<string>; notes: Set<string> }>({
-    known: new Set(),
+  const touched = useRef<{ status: Set<string>; notes: Set<string> }>({
+    status: new Set(),
     notes: new Set(),
   });
   /* A reset mid-load invalidates the whole server snapshot, not single ids. */
   const skipAdopt = useRef(false);
 
-  useEffect(() => write(KNOWN_KEY, [...known]), [known]);
-  useEffect(
-    () => write(NOTES_KEY, Object.fromEntries(notes)),
-    [notes]
-  );
+  useEffect(() => writeStatuses(statuses), [statuses]);
+  useEffect(() => write(NOTES_KEY, Object.fromEntries(notes)), [notes]);
 
   /* One promise chain per question, so a fast double-click issues its two
      RPCs in order. Fired in parallel they can land in either order on the
@@ -178,9 +216,9 @@ export function useQuestionState(): QuestionState {
           clearPending(bucket, id);
           /* Only claim "synced" when nothing at all is still queued —
              otherwise one lucky write paints over work that never landed. */
-          if (nothingPending()) setStatus("synced");
+          if (nothingPending()) setSync("synced");
         })
-        .catch(() => setStatus("offline"));
+        .catch(() => setSync("offline"));
 
       chains.current.set(key, tail);
       void tail.finally(() => {
@@ -196,8 +234,8 @@ export function useQuestionState(): QuestionState {
     const device = getDeviceId();
 
     (async () => {
-      seedPendingOnce(knownRef.current, notesRef.current);
-      touched.current = { known: new Set(), notes: new Set() };
+      seedPendingOnce(statusesRef.current, notesRef.current);
+      touched.current = { status: new Set(), notes: new Set() };
       skipAdopt.current = false;
 
       /* Replay first: the server's copy is only trustworthy once our local
@@ -205,9 +243,9 @@ export function useQuestionState(): QuestionState {
          "offline" rather than adopting a stale server view. */
       const pending = readPending();
       try {
-        for (const id of pending.known) {
-          await db.setKnown(device, id, knownRef.current.has(id));
-          clearPending("known", id);
+        for (const id of pending.status) {
+          await db.setStatus(device, id, statusesRef.current.get(id) ?? null);
+          clearPending("status", id);
         }
         for (const id of pending.notes) {
           const note = notesRef.current.get(id);
@@ -216,7 +254,7 @@ export function useQuestionState(): QuestionState {
           clearPending("notes", id);
         }
       } catch {
-        if (!cancelled) setStatus("offline");
+        if (!cancelled) setSync("offline");
         return;
       }
 
@@ -227,11 +265,14 @@ export function useQuestionState(): QuestionState {
         /* A reset landed while this was in flight, so the snapshot describes
            a world the user has already thrown away. Keep what's on screen. */
         if (skipAdopt.current) {
-          setStatus(nothingPending() ? "synced" : "offline");
+          setSync(nothingPending() ? "synced" : "offline");
           return;
         }
 
-        const nextKnown = new Set(remote.known ?? []);
+        const nextStatuses = new Map<string, StoredStatus>();
+        for (const [id, value] of Object.entries(remote.statuses ?? {})) {
+          if (isStored(value)) nextStatuses.set(id, value);
+        }
         const nextNotes = new Map(
           (remote.notes ?? []).map(
             (n) =>
@@ -240,14 +281,15 @@ export function useQuestionState(): QuestionState {
         );
 
         /* Overlay anything edited since this request went out. Supabase cold
-           starts take seconds and marking a question known is the first thing
-           anyone does, so a plain assignment here would silently revert that
-           click — and, once the write effect ran, wipe it from localStorage
-           too, leaving the queued id to delete the note server-side on the
-           next run. Merging keeps the newer local truth on top. */
-        for (const id of touched.current.known) {
-          if (knownRef.current.has(id)) nextKnown.add(id);
-          else nextKnown.delete(id);
+           starts take seconds and marking a question is the first thing anyone
+           does, so a plain assignment here would silently revert that click —
+           and, once the write effect ran, wipe it from localStorage too,
+           leaving the queued id to delete the note server-side on the next
+           run. Merging keeps the newer local truth on top. */
+        for (const id of touched.current.status) {
+          const local = statusesRef.current.get(id);
+          if (local) nextStatuses.set(id, local);
+          else nextStatuses.delete(id);
         }
         for (const id of touched.current.notes) {
           const local = notesRef.current.get(id);
@@ -255,11 +297,11 @@ export function useQuestionState(): QuestionState {
           else nextNotes.delete(id);
         }
 
-        setKnown(nextKnown);
+        setStatuses(nextStatuses);
         setNotes(nextNotes);
-        setStatus(nothingPending() ? "synced" : "offline");
+        setSync(nothingPending() ? "synced" : "offline");
       } catch {
-        if (!cancelled) setStatus("offline");
+        if (!cancelled) setSync("offline");
       }
     })();
 
@@ -268,46 +310,50 @@ export function useQuestionState(): QuestionState {
     };
   }, []);
 
-  const toggleKnown = useCallback(
-    (questionId: string) => {
-      const next = !knownRef.current.has(questionId);
-      setKnown((prev) => {
-        const set = new Set(prev);
-        if (next) set.add(questionId);
-        else set.delete(questionId);
-        return set;
+  const statusOf = useCallback(
+    (questionId: string): QuestionStatus => statuses.get(questionId) ?? "new",
+    [statuses]
+  );
+
+  const setStatus = useCallback(
+    (questionId: string, next: QuestionStatus) => {
+      setStatuses((prev) => {
+        const map = new Map(prev);
+        if (next === "new") map.delete(questionId);
+        else map.set(questionId, next);
+        return map;
       });
-      push("known", questionId, () =>
-        db.setKnown(getDeviceId(), questionId, next)
+      push("status", questionId, () =>
+        db.setStatus(getDeviceId(), questionId, next === "new" ? null : next)
       );
     },
     [push]
   );
 
-  const clearKnown = useCallback(() => {
+  const clearAll = useCallback(() => {
     /* Captured before the state update: by the time the rejection below runs,
-       knownRef.current is the empty set we just installed, so reading it there
-       would re-queue nothing and the next load would resurrect every tick. */
-    const wiped = [...knownRef.current];
+       statusesRef.current is the empty map we just installed, so reading it
+       there would re-queue nothing and the next load would resurrect it all. */
+    const wiped = [...statusesRef.current.keys()];
 
-    setKnown(new Set());
+    setStatuses(new Map());
     if (!dbConfigured) return;
 
     skipAdopt.current = true;
-    /* A wipe supersedes every queued known-push. */
-    write(PENDING_KEY, { ...readPending(), known: [] });
+    /* A wipe supersedes every queued status push. */
+    write(PENDING_KEY, { ...readPending(), status: [] });
 
-    db.clearKnown(getDeviceId())
+    db.clear(getDeviceId())
       .then(() => {
-        if (nothingPending()) setStatus("synced");
+        if (nothingPending()) setSync("synced");
       })
       .catch(() => {
-        setStatus("offline");
-        /* Re-queue so the replay pushes known=false for each id. */
+        setSync("offline");
+        /* Re-queue so the replay pushes the cleared state for each id. */
         const p = readPending();
         write(PENDING_KEY, {
           ...p,
-          known: [...new Set([...p.known, ...wiped])],
+          status: [...new Set([...p.status, ...wiped])],
         });
       });
   }, []);
@@ -348,14 +394,15 @@ export function useQuestionState(): QuestionState {
 
   return useMemo(
     () => ({
-      known,
+      statuses,
+      statusOf,
       notes,
-      status,
-      toggleKnown,
-      clearKnown,
+      sync,
+      setStatus,
+      clearAll,
       saveNote,
       deleteNote,
     }),
-    [known, notes, status, toggleKnown, clearKnown, saveNote, deleteNote]
+    [statuses, statusOf, notes, sync, setStatus, clearAll, saveNote, deleteNote]
   );
 }

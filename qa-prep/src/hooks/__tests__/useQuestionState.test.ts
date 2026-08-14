@@ -9,8 +9,8 @@ const { cfg, db } = vi.hoisted(() => ({
   cfg: { on: true },
   db: {
     load: vi.fn(),
-    setKnown: vi.fn(),
-    clearKnown: vi.fn(),
+    setStatus: vi.fn(),
+    clear: vi.fn(),
     saveNote: vi.fn(),
     deleteNote: vi.fn(),
   },
@@ -25,9 +25,11 @@ vi.mock("../../lib/db", () => ({
 
 import { useQuestionState } from "../useQuestionState";
 
-const KNOWN_KEY = "qa-prep:reviewed";
+const STATUS_KEY = "qa-prep:status";
+/** The pre-three-state shape: a flat list of "reviewed" ids. */
+const LEGACY_KEY = "qa-prep:reviewed";
 const NOTES_KEY = "qa-prep:notes";
-const PENDING_KEY = "qa-prep:pending";
+const PENDING_KEY = "qa-prep:pending-v2";
 
 const stored = <T,>(key: string): T | null => {
   const raw = window.localStorage.getItem(key);
@@ -35,20 +37,97 @@ const stored = <T,>(key: string): T | null => {
 };
 
 const pending = () =>
-  stored<{ known: string[]; notes: string[] }>(PENDING_KEY) ?? {
-    known: [],
+  stored<{ status: string[]; notes: string[] }>(PENDING_KEY) ?? {
+    status: [],
     notes: [],
   };
+
+const anyDevice = expect.any(String);
 
 beforeEach(() => {
   window.localStorage.clear();
   vi.clearAllMocks();
   cfg.on = true;
-  db.load.mockResolvedValue({ known: [], notes: [] });
-  db.setKnown.mockResolvedValue(undefined);
-  db.clearKnown.mockResolvedValue(undefined);
+  db.load.mockResolvedValue({ statuses: {}, notes: [] });
+  db.setStatus.mockResolvedValue(undefined);
+  db.clear.mockResolvedValue(undefined);
   db.saveNote.mockResolvedValue(undefined);
   db.deleteNote.mockResolvedValue(undefined);
+});
+
+describe("the three states", () => {
+  beforeEach(() => {
+    cfg.on = false;
+  });
+
+  it("starts every question unmarked", () => {
+    const { result } = renderHook(() => useQuestionState());
+    expect(result.current.statusOf("a1")).toBe("new");
+    expect(result.current.statuses.size).toBe(0);
+  });
+
+  it("moves a question between review and known", () => {
+    const { result } = renderHook(() => useQuestionState());
+
+    act(() => result.current.setStatus("a1", "review"));
+    expect(result.current.statusOf("a1")).toBe("review");
+
+    act(() => result.current.setStatus("a1", "known"));
+    expect(result.current.statusOf("a1")).toBe("known");
+    /* One bucket at a time — the states are exclusive. */
+    expect(result.current.statuses.get("a1")).toBe("known");
+  });
+
+  it("drops the entry entirely when set back to unmarked", () => {
+    const { result } = renderHook(() => useQuestionState());
+
+    act(() => result.current.setStatus("a1", "known"));
+    act(() => result.current.setStatus("a1", "new"));
+
+    expect(result.current.statusOf("a1")).toBe("new");
+    expect(result.current.statuses.has("a1")).toBe(false);
+    expect(stored<Record<string, string>>(STATUS_KEY)).toEqual({});
+  });
+
+  /* Everyone who used the app before "review" existed has a flat list of ids
+     under the old key, and every one of them meant "known". */
+  it("reads the old flat reviewed list as known", () => {
+    window.localStorage.setItem(LEGACY_KEY, JSON.stringify(["a1", "a2"]));
+    const { result } = renderHook(() => useQuestionState());
+
+    expect(result.current.statusOf("a1")).toBe("known");
+    expect(result.current.statusOf("a2")).toBe("known");
+  });
+
+  it("lets a newer three-state entry win over the legacy list", () => {
+    window.localStorage.setItem(LEGACY_KEY, JSON.stringify(["a1"]));
+    window.localStorage.setItem(STATUS_KEY, JSON.stringify({ a1: "review" }));
+
+    const { result } = renderHook(() => useQuestionState());
+    expect(result.current.statusOf("a1")).toBe("review");
+  });
+
+  /* Otherwise the legacy key would re-seed the id on the next boot. */
+  it("keeps the legacy key in step when a question is cleared", () => {
+    window.localStorage.setItem(LEGACY_KEY, JSON.stringify(["a1", "a2"]));
+    const { result } = renderHook(() => useQuestionState());
+
+    act(() => result.current.setStatus("a1", "new"));
+
+    expect(stored<string[]>(LEGACY_KEY)).toEqual(["a2"]);
+  });
+
+  it("ignores junk in storage", () => {
+    window.localStorage.setItem(
+      STATUS_KEY,
+      JSON.stringify({ a1: "bogus", a2: "known", a3: 7 })
+    );
+    const { result } = renderHook(() => useQuestionState());
+
+    expect(result.current.statusOf("a1")).toBe("new");
+    expect(result.current.statusOf("a2")).toBe("known");
+    expect(result.current.statusOf("a3")).toBe("new");
+  });
 });
 
 describe("without a database", () => {
@@ -56,14 +135,14 @@ describe("without a database", () => {
     cfg.on = false;
   });
 
-  it("reports itself off and never calls out", async () => {
+  it("reports itself off and never calls out", () => {
     const { result } = renderHook(() => useQuestionState());
-    act(() => result.current.toggleKnown("a1"));
+    act(() => result.current.setStatus("a1", "known"));
 
-    expect(result.current.status).toBe("off");
-    expect(result.current.known.has("a1")).toBe(true);
+    expect(result.current.sync).toBe("off");
+    expect(result.current.statusOf("a1")).toBe("known");
     expect(db.load).not.toHaveBeenCalled();
-    expect(db.setKnown).not.toHaveBeenCalled();
+    expect(db.setStatus).not.toHaveBeenCalled();
   });
 
   it("still persists locally", () => {
@@ -79,7 +158,7 @@ describe("without a database", () => {
 describe("with a database", () => {
   it("adopts the server's state on load", async () => {
     db.load.mockResolvedValue({
-      known: ["a2"],
+      statuses: { a2: "known", a4: "review" },
       notes: [
         { question_id: "a3", body: "from the server", updated_at: "2026-08-01" },
       ],
@@ -87,16 +166,32 @@ describe("with a database", () => {
 
     const { result } = renderHook(() => useQuestionState());
 
-    await waitFor(() => expect(result.current.status).toBe("synced"));
-    expect([...result.current.known]).toEqual(["a2"]);
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
+    expect(result.current.statusOf("a2")).toBe("known");
+    expect(result.current.statusOf("a4")).toBe("review");
     expect(result.current.notes.get("a3")?.body).toBe("from the server");
+  });
+
+  it("sends null to clear a question, not a status string", async () => {
+    const { result } = renderHook(() => useQuestionState());
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
+
+    act(() => result.current.setStatus("a1", "review"));
+    act(() => result.current.setStatus("a1", "new"));
+
+    await waitFor(() => expect(db.setStatus).toHaveBeenCalledTimes(2));
+    expect(db.setStatus).toHaveBeenNthCalledWith(1, anyDevice, "a1", "review");
+    expect(db.setStatus).toHaveBeenNthCalledWith(2, anyDevice, "a1", null);
   });
 
   /* The regression that motivated the pending list: someone who used the app
      before it had a backend must not have their progress erased by the first
      load finding an empty server. */
   it("pushes pre-existing local progress before trusting the server", async () => {
-    window.localStorage.setItem(KNOWN_KEY, JSON.stringify(["a1", "a2"]));
+    window.localStorage.setItem(
+      STATUS_KEY,
+      JSON.stringify({ a1: "known", a2: "review" })
+    );
     window.localStorage.setItem(
       NOTES_KEY,
       JSON.stringify({ a1: { body: "mine", updated_at: "2026-01-01" } })
@@ -104,48 +199,48 @@ describe("with a database", () => {
 
     const { result } = renderHook(() => useQuestionState());
 
-    await waitFor(() => expect(result.current.status).toBe("synced"));
-    expect(db.setKnown).toHaveBeenCalledWith(expect.any(String), "a1", true);
-    expect(db.setKnown).toHaveBeenCalledWith(expect.any(String), "a2", true);
-    expect(db.saveNote).toHaveBeenCalledWith(expect.any(String), "a1", "mine");
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
+    expect(db.setStatus).toHaveBeenCalledWith(anyDevice, "a1", "known");
+    expect(db.setStatus).toHaveBeenCalledWith(anyDevice, "a2", "review");
+    expect(db.saveNote).toHaveBeenCalledWith(anyDevice, "a1", "mine");
     /* Every push landed, so nothing is left queued. */
-    expect(pending()).toEqual({ known: [], notes: [] });
+    expect(pending()).toEqual({ status: [], notes: [] });
   });
 
   it("keeps local state when the replay fails, rather than overwriting it", async () => {
-    window.localStorage.setItem(KNOWN_KEY, JSON.stringify(["a1"]));
-    db.setKnown.mockRejectedValue(new Error("offline"));
+    window.localStorage.setItem(STATUS_KEY, JSON.stringify({ a1: "known" }));
+    db.setStatus.mockRejectedValue(new Error("offline"));
 
     const { result } = renderHook(() => useQuestionState());
 
-    await waitFor(() => expect(result.current.status).toBe("offline"));
-    expect(result.current.known.has("a1")).toBe(true);
+    await waitFor(() => expect(result.current.sync).toBe("offline"));
+    expect(result.current.statusOf("a1")).toBe("known");
     expect(db.load).not.toHaveBeenCalled();
-    expect(pending().known).toEqual(["a1"]);
+    expect(pending().status).toEqual(["a1"]);
   });
 
   it("queues an edit that fails to reach the server", async () => {
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
-    db.setKnown.mockRejectedValue(new Error("offline"));
-    act(() => result.current.toggleKnown("a5"));
+    db.setStatus.mockRejectedValue(new Error("offline"));
+    act(() => result.current.setStatus("a5", "review"));
 
-    await waitFor(() => expect(result.current.status).toBe("offline"));
+    await waitFor(() => expect(result.current.sync).toBe("offline"));
     /* The click stuck locally even though the write did not. */
-    expect(result.current.known.has("a5")).toBe(true);
-    expect(pending().known).toEqual(["a5"]);
+    expect(result.current.statusOf("a5")).toBe("review");
+    expect(pending().status).toEqual(["a5"]);
   });
 
   it("clears the queue entry once a write lands", async () => {
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
     act(() => result.current.saveNote("a5", "isolation levels"));
 
     await waitFor(() =>
       expect(db.saveNote).toHaveBeenCalledWith(
-        expect.any(String),
+        anyDevice,
         "a5",
         "isolation levels"
       )
@@ -155,29 +250,29 @@ describe("with a database", () => {
 
   it("treats saving a blank note as deleting it", async () => {
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
     act(() => result.current.saveNote("a5", "something"));
     act(() => result.current.saveNote("a5", "   "));
 
     expect(result.current.notes.has("a5")).toBe(false);
     await waitFor(() =>
-      expect(db.deleteNote).toHaveBeenCalledWith(expect.any(String), "a5")
+      expect(db.deleteNote).toHaveBeenCalledWith(anyDevice, "a5")
     );
   });
 
   it("sends one uuid device id for every call", async () => {
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
-    act(() => result.current.toggleKnown("a5"));
-    await waitFor(() => expect(db.setKnown).toHaveBeenCalled());
+    act(() => result.current.setStatus("a5", "known"));
+    await waitFor(() => expect(db.setStatus).toHaveBeenCalled());
 
     const device = db.load.mock.calls[0][0];
     expect(device).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     );
-    expect(db.setKnown.mock.calls[0][0]).toBe(device);
+    expect(db.setStatus.mock.calls[0][0]).toBe(device);
   });
 
   /* The server decided its answer before these edits existed, so it must not
@@ -185,7 +280,10 @@ describe("with a database", () => {
      server's copy over localStorage, so the note was lost on both sides. */
   describe("an edit made while the first load is in flight", () => {
     /** Holds `db.load` open so a test can act during the gap. */
-    function heldLoad(value: { known: string[]; notes: unknown[] }) {
+    function heldLoad(value: {
+      statuses: Record<string, string>;
+      notes: unknown[];
+    }) {
       let release!: () => void;
       db.load.mockReturnValue(
         new Promise((resolve) => {
@@ -196,21 +294,21 @@ describe("with a database", () => {
     }
 
     it("survives the server's snapshot landing afterwards", async () => {
-      const release = heldLoad({ known: [], notes: [] });
+      const release = heldLoad({ statuses: {}, notes: [] });
       const { result } = renderHook(() => useQuestionState());
 
-      act(() => result.current.toggleKnown("a1"));
+      act(() => result.current.setStatus("a1", "review"));
       act(() => result.current.saveNote("a1", "mine, written during load"));
       await act(async () => {
         release();
       });
 
-      expect(result.current.known.has("a1")).toBe(true);
+      expect(result.current.statusOf("a1")).toBe("review");
       expect(result.current.notes.get("a1")?.body).toBe(
         "mine, written during load"
       );
       /* And it survived in storage too, not just in memory. */
-      expect(stored<string[]>(KNOWN_KEY)).toContain("a1");
+      expect(stored<Record<string, string>>(STATUS_KEY)!.a1).toBe("review");
       expect(
         stored<Record<string, { body: string }>>(NOTES_KEY)!.a1.body
       ).toBe("mine, written during load");
@@ -218,98 +316,128 @@ describe("with a database", () => {
 
     it("still takes the server's word on questions it did not touch", async () => {
       const release = heldLoad({
-        known: ["a9"],
+        statuses: { a9: "known" },
         notes: [{ question_id: "a9", body: "server side", updated_at: "" }],
       });
       const { result } = renderHook(() => useQuestionState());
 
-      act(() => result.current.toggleKnown("a1"));
+      act(() => result.current.setStatus("a1", "review"));
       await act(async () => {
         release();
       });
 
-      expect(result.current.known.has("a1")).toBe(true);
-      expect(result.current.known.has("a9")).toBe(true);
+      expect(result.current.statusOf("a1")).toBe("review");
+      expect(result.current.statusOf("a9")).toBe("known");
       expect(result.current.notes.get("a9")?.body).toBe("server side");
     });
 
-    it("does not let the snapshot resurrect a reset", async () => {
-      window.localStorage.setItem(KNOWN_KEY, JSON.stringify(["a1", "a2"]));
-      const release = heldLoad({ known: ["a1", "a2"], notes: [] });
+    /* Clearing a question is an edit too, and it is the one the snapshot is
+       most likely to undo — the server still has the row. */
+    it("does not let the snapshot restore a question cleared during load", async () => {
+      window.localStorage.setItem(STATUS_KEY, JSON.stringify({ a1: "known" }));
+      const release = heldLoad({ statuses: { a1: "known" }, notes: [] });
       const { result } = renderHook(() => useQuestionState());
 
-      act(() => result.current.clearKnown());
+      act(() => result.current.setStatus("a1", "new"));
       await act(async () => {
         release();
       });
 
-      expect(result.current.known.size).toBe(0);
+      expect(result.current.statusOf("a1")).toBe("new");
+    });
+
+    it("does not let the snapshot resurrect a reset", async () => {
+      window.localStorage.setItem(
+        STATUS_KEY,
+        JSON.stringify({ a1: "known", a2: "review" })
+      );
+      const release = heldLoad({
+        statuses: { a1: "known", a2: "review" },
+        notes: [],
+      });
+      const { result } = renderHook(() => useQuestionState());
+
+      act(() => result.current.clearAll());
+      await act(async () => {
+        release();
+      });
+
+      expect(result.current.statuses.size).toBe(0);
     });
   });
 
   it("re-queues a reset that never reached the server", async () => {
-    db.load.mockResolvedValue({ known: ["a1", "a2"], notes: [] });
+    db.load.mockResolvedValue({
+      statuses: { a1: "known", a2: "review" },
+      notes: [],
+    });
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
-    db.clearKnown.mockRejectedValue(new Error("offline"));
-    act(() => result.current.clearKnown());
+    db.clear.mockRejectedValue(new Error("offline"));
+    act(() => result.current.clearAll());
 
-    await waitFor(() => expect(result.current.status).toBe("offline"));
-    /* Without these queued, the next load would tick every box again. */
-    expect(pending().known.sort()).toEqual(["a1", "a2"]);
+    await waitFor(() => expect(result.current.sync).toBe("offline"));
+    /* Without these queued, the next load would restore both. */
+    expect(pending().status.sort()).toEqual(["a1", "a2"]);
   });
 
   it("does not call itself synced while an edit is still queued", async () => {
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
-    db.setKnown.mockRejectedValueOnce(new Error("offline"));
-    act(() => result.current.toggleKnown("a1"));
-    await waitFor(() => expect(result.current.status).toBe("offline"));
+    db.setStatus.mockRejectedValueOnce(new Error("offline"));
+    act(() => result.current.setStatus("a1", "known"));
+    await waitFor(() => expect(result.current.sync).toBe("offline"));
 
     /* A later write succeeding says nothing about the one still stuck. */
-    act(() => result.current.toggleKnown("a2"));
-    await waitFor(() => expect(db.setKnown).toHaveBeenCalledTimes(2));
+    act(() => result.current.setStatus("a2", "review"));
+    await waitFor(() => expect(db.setStatus).toHaveBeenCalledTimes(2));
 
-    expect(pending().known).toEqual(["a1"]);
-    expect(result.current.status).toBe("offline");
+    expect(pending().status).toEqual(["a1"]);
+    expect(result.current.sync).toBe("offline");
   });
 
-  it("serialises rapid toggles of the same question", async () => {
+  it("serialises rapid changes to the same question", async () => {
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
-    const order: boolean[] = [];
-    db.setKnown.mockImplementation(
-      (_d: string, _q: string, value: boolean) =>
+    const order: (string | null)[] = [];
+    db.setStatus.mockImplementation(
+      (_d: string, _q: string, value: string | null) =>
         new Promise((resolve) =>
           /* The first call is the slow one: fired in parallel it would land
              last and leave the server disagreeing with the screen. */
-          setTimeout(() => {
-            order.push(value);
-            resolve(undefined);
-          }, value ? 20 : 0)
+          setTimeout(
+            () => {
+              order.push(value);
+              resolve(undefined);
+            },
+            value === "review" ? 20 : 0
+          )
         )
     );
 
-    act(() => result.current.toggleKnown("a1"));
-    act(() => result.current.toggleKnown("a1"));
+    act(() => result.current.setStatus("a1", "review"));
+    act(() => result.current.setStatus("a1", "known"));
 
     await waitFor(() => expect(order).toHaveLength(2));
-    expect(order).toEqual([true, false]);
-    expect(result.current.known.has("a1")).toBe(false);
+    expect(order).toEqual(["review", "known"]);
+    expect(result.current.statusOf("a1")).toBe("known");
   });
 
   it("wipes progress on the server too", async () => {
-    db.load.mockResolvedValue({ known: ["a1", "a2"], notes: [] });
+    db.load.mockResolvedValue({
+      statuses: { a1: "known", a2: "review" },
+      notes: [],
+    });
     const { result } = renderHook(() => useQuestionState());
-    await waitFor(() => expect(result.current.status).toBe("synced"));
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
 
-    act(() => result.current.clearKnown());
+    act(() => result.current.clearAll());
 
-    expect(result.current.known.size).toBe(0);
-    await waitFor(() => expect(db.clearKnown).toHaveBeenCalled());
-    expect(stored<string[]>(KNOWN_KEY)).toEqual([]);
+    expect(result.current.statuses.size).toBe(0);
+    await waitFor(() => expect(db.clear).toHaveBeenCalled());
+    expect(stored<Record<string, string>>(STATUS_KEY)).toEqual({});
   });
 });

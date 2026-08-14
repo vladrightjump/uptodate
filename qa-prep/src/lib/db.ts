@@ -9,6 +9,9 @@
  * in. See supabase/migrations for the schema.
  */
 
+/** The two states that get stored. Absent means the question is untouched. */
+export type StoredStatus = "review" | "known";
+
 /** One question's note. The app allows exactly one per question. */
 export interface RemoteNote {
   question_id: string;
@@ -17,7 +20,8 @@ export interface RemoteNote {
 }
 
 export interface RemoteState {
-  known: string[];
+  /** Keyed by question id: `{ "a1": "known", "a3": "review" }`. */
+  statuses: Record<string, StoredStatus>;
   notes: RemoteNote[];
 }
 
@@ -66,15 +70,20 @@ export const db = {
   load: (deviceId: string) =>
     rpc<RemoteState>("qa_state_load", { p_device: deviceId }),
 
-  setKnown: (deviceId: string, questionId: string, known: boolean) =>
-    rpc<void>("qa_state_set_known", {
+  /** `null` moves the question back to untouched, which drops its row. */
+  setStatus: (
+    deviceId: string,
+    questionId: string,
+    status: StoredStatus | null
+  ) =>
+    rpc<void>("qa_state_set_status", {
       p_device: deviceId,
       p_question: questionId,
-      p_known: known,
+      p_status: status,
     }),
 
-  clearKnown: (deviceId: string) =>
-    rpc<void>("qa_state_clear_known", { p_device: deviceId }),
+  clear: (deviceId: string) =>
+    rpc<void>("qa_state_clear", { p_device: deviceId }),
 
   saveNote: (deviceId: string, questionId: string, body: string) =>
     rpc<void>("qa_note_save", {

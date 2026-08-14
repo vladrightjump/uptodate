@@ -13,21 +13,81 @@ const question: Question = {
 function setup(overrides: Partial<Parameters<typeof QuestionCard>[0]> = {}) {
   const onSaveNote = vi.fn();
   const onDeleteNote = vi.fn();
+  const onSetStatus = vi.fn();
   const utils = render(
     <QuestionCard
       question={question}
       index={1}
       open={false}
-      reviewed={false}
+      status="new"
       onToggleOpen={vi.fn()}
-      onToggleReviewed={vi.fn()}
+      onSetStatus={onSetStatus}
       onSaveNote={onSaveNote}
       onDeleteNote={onDeleteNote}
       {...overrides}
     />
   );
-  return { ...utils, onSaveNote, onDeleteNote };
+  return { ...utils, onSaveNote, onDeleteNote, onSetStatus };
 }
+
+describe("QuestionCard status control", () => {
+  it("shows nothing selected on an unmarked question", () => {
+    setup();
+    expect(screen.getByRole("button", { name: "review" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    expect(screen.getByRole("button", { name: "known" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  it("marks a question for review", () => {
+    const { onSetStatus } = setup();
+    fireEvent.click(screen.getByRole("button", { name: "review" }));
+    expect(onSetStatus).toHaveBeenCalledWith("q1", "review");
+  });
+
+  it("moves straight from review to known", () => {
+    const { onSetStatus } = setup({ status: "review" });
+    expect(screen.getByRole("button", { name: "review" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "known" }));
+    expect(onSetStatus).toHaveBeenCalledWith("q1", "known");
+  });
+
+  /* Undoing a misclick should be one tap on the thing you just hit, not a
+     hunt for the dash. */
+  it("clicking the current state steps back to unmarked", () => {
+    const { onSetStatus } = setup({ status: "known" });
+    fireEvent.click(screen.getByRole("button", { name: "known" }));
+    expect(onSetStatus).toHaveBeenCalledWith("q1", "new");
+  });
+
+  it("labels the dash for screen readers", () => {
+    setup({ status: "known" });
+    const clear = screen.getByRole("button", { name: "Not marked" });
+    expect(clear).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(clear);
+    /* Already-selected steps back to "new"; this one is not selected, so it
+       sets "new" directly. Either way the question ends up unmarked. */
+    expect(screen.getByRole("button", { name: "Not marked" })).toBeInTheDocument();
+  });
+
+  it("carries the state on the card so the list is scannable", () => {
+    const { container, unmount } = setup({ status: "review" });
+    expect(container.querySelector(".card")).toHaveClass("is-review");
+    unmount();
+
+    const second = setup({ status: "known" });
+    expect(second.container.querySelector(".card")).toHaveClass("is-known");
+  });
+});
 
 describe("QuestionCard notes", () => {
   it("offers to add a note and hides the editor until asked", () => {

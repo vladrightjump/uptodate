@@ -3,9 +3,24 @@ import { QuestionCard } from "./components/QuestionCard";
 import { Sidebar } from "./components/Sidebar";
 import { ALL_QUESTIONS, ROUNDS, TOTAL_QUESTIONS } from "./data/rounds";
 import { useIdSet, useLocalStorage } from "./hooks/useLocalStorage";
-import { useQuestionState, type SyncStatus } from "./hooks/useQuestionState";
+import {
+  useQuestionState,
+  type QuestionStatus,
+  type SyncStatus,
+} from "./hooks/useQuestionState";
 import { useTheme } from "./hooks/useTheme";
 import type { DiffFilter, Question } from "./types";
+
+/** The study-pass filter: "all", or one of the three buckets. */
+type GroupFilter = "all" | QuestionStatus;
+
+const GROUP_FILTERS: GroupFilter[] = ["all", "new", "review", "known"];
+const GROUP_FILTER_LABEL: Record<GroupFilter, string> = {
+  all: "all",
+  new: "unmarked",
+  review: "to review",
+  known: "known",
+};
 
 const DIFF_FILTERS: DiffFilter[] = ["all", "easy", "mid", "hard"];
 
@@ -57,17 +72,18 @@ export default function App() {
   );
   const [search, setSearch] = useState("");
   const [diff, setDiff] = useState<DiffFilter>("all");
-  const [hideKnown, setHideKnown] = useState(false);
+  const [group, setGroup] = useState<GroupFilter>("all");
   /* Phone-only: the filter row is collapsed behind a button so the sticky
      header stays short. Wider screens show the row and ignore this. */
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const {
-    known,
+    statuses,
+    statusOf,
     notes,
-    status: syncStatus,
-    toggleKnown,
-    clearKnown,
+    sync: syncStatus,
+    setStatus,
+    clearAll,
     saveNote,
     deleteNote,
   } = useQuestionState();
@@ -89,15 +105,15 @@ export default function App() {
 
     return pool.filter(({ q }) => {
       if (diff !== "all" && q.diff !== diff) return false;
-      if (hideKnown && known.has(q.id)) return false;
+      if (group !== "all" && statusOf(q.id) !== group) return false;
       if (searching && !searchableText(q).includes(query)) return false;
       return true;
     });
-  }, [searching, query, activeRound, diff, hideKnown, known]);
+  }, [searching, query, activeRound, diff, group, statusOf]);
 
   /* Shown on the phone's "filters" button, so a filter hiding questions is
      still visible once the row it lives in is collapsed. */
-  const activeFilters = (diff === "all" ? 0 : 1) + (hideKnown ? 1 : 0);
+  const activeFilters = (diff === "all" ? 0 : 1) + (group === "all" ? 0 : 1);
 
   const allOpen =
     visible.length > 0 && visible.every(({ q }) => opened.set.has(q.id));
@@ -108,14 +124,33 @@ export default function App() {
     else ids.forEach((id) => !opened.set.has(id) && opened.toggle(id));
   };
 
-  /* Count only ids that still exist. The question bank is hand-edited, so a
-     renamed or deleted id leaves an orphan in a returning user's storage —
-     counting those raw gives "45 of 41 (110%)" and overflows the progress bar. */
-  const doneCount = useMemo(
-    () => ALL_QUESTIONS.reduce((n, q) => n + (known.has(q.id) ? 1 : 0), 0),
-    [known]
+  /* Counted by walking the question bank, not the stored map. The bank is
+     hand-edited, so a renamed or deleted id leaves an orphan in a returning
+     user's storage — counting those raw gave "45 of 41 (110%)" and overflowed
+     the bar. Walking the bank also makes "unmarked" a plain subtraction. */
+  const tally = useMemo(() => {
+    let known = 0;
+    let review = 0;
+    for (const q of ALL_QUESTIONS) {
+      const s = statuses.get(q.id);
+      if (s === "known") known += 1;
+      else if (s === "review") review += 1;
+    }
+    return { known, review, untouched: TOTAL_QUESTIONS - known - review };
+  }, [statuses]);
+
+  const knownPct = Math.round((tally.known / TOTAL_QUESTIONS) * 100);
+  const reviewPct = Math.round((tally.review / TOTAL_QUESTIONS) * 100);
+
+  /* Only "known" ids drive the sidebar's per-round count, so the numbers there
+     keep meaning "done", not "touched". */
+  const knownIds = useMemo(
+    () =>
+      new Set(
+        [...statuses].filter(([, s]) => s === "known").map(([id]) => id)
+      ),
+    [statuses]
   );
-  const donePct = Math.round((doneCount / TOTAL_QUESTIONS) * 100);
 
   return (
     <div className="app">
@@ -203,14 +238,23 @@ export default function App() {
               ))}
             </div>
 
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={hideKnown}
-                onChange={(e) => setHideKnown(e.target.checked)}
-              />
-              <span>hide known</span>
-            </label>
+            <div
+              className="segmented"
+              role="group"
+              aria-label="Filter by what you know"
+            >
+              {GROUP_FILTERS.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  className={group === g ? "is-active" : ""}
+                  aria-pressed={group === g}
+                  onClick={() => setGroup(g)}
+                >
+                  {GROUP_FILTER_LABEL[g]}
+                </button>
+              ))}
+            </div>
 
             <button type="button" className="ghost" onClick={toggleAll}>
               {allOpen ? "collapse all" : "expand all"}
@@ -220,13 +264,20 @@ export default function App() {
       </header>
 
       <div className="progress-strip">
+        {/* Two segments in one track: known first, then the review backlog
+            beside it, so the gap at the end is what's still untouched. */}
         <div className="progress-bar" aria-hidden="true">
-          <span style={{ width: `${donePct}%` }} />
+          <span className="seg-known" style={{ width: `${knownPct}%` }} />
+          <span className="seg-review" style={{ width: `${reviewPct}%` }} />
         </div>
         <span className="progress-label">
-          {doneCount} of {TOTAL_QUESTIONS} marked known ({donePct}%)
-          {doneCount > 0 && (
-            <button type="button" className="link" onClick={clearKnown}>
+          <strong>{tally.known}</strong> known
+          <span className="progress-sep">·</span>
+          <strong>{tally.review}</strong> to review
+          <span className="progress-sep">·</span>
+          {tally.untouched} unmarked
+          {tally.known + tally.review > 0 && (
+            <button type="button" className="link" onClick={clearAll}>
               reset
             </button>
           )}
@@ -247,7 +298,7 @@ export default function App() {
         <Sidebar
           rounds={ROUNDS}
           activeId={activeRound.id}
-          reviewed={known}
+          reviewed={knownIds}
           onSelect={(id) => {
             setActiveRoundId(id);
             setSearch("");
@@ -277,10 +328,10 @@ export default function App() {
                     question={q}
                     index={i + 1}
                     open={opened.set.has(q.id)}
-                    reviewed={known.has(q.id)}
+                    status={statusOf(q.id)}
                     note={notes.get(q.id)}
                     onToggleOpen={opened.toggle}
-                    onToggleReviewed={toggleKnown}
+                    onSetStatus={setStatus}
                     onSaveNote={saveNote}
                     onDeleteNote={deleteNote}
                   />

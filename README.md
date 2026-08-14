@@ -159,9 +159,29 @@ ships what the site runs, so the two cannot drift.
 
 ### Saved progress and notes
 
-Marking a question **known**, and the one free-text **note** each question
-can carry, are written to `localStorage` first — so the UI never waits on a
-network and works offline — and then mirrored to Supabase.
+Every question sits in exactly one of three states, and can carry one
+free-text **note**. Both are written to `localStorage` first — so the UI never
+waits on a network and works offline — and then mirrored to Supabase.
+
+| State | Means | Where it shows |
+| --- | --- | --- |
+| unmarked | not looked at yet | no row in the database at all |
+| **review** | seen, needs another pass | amber card edge, amber bar segment |
+| **known** | solid | green card edge, green bar segment |
+
+Only the two marked states get stored, so an untouched bank costs nothing and
+a reset is a plain `DELETE`. The filter row narrows the list to one bucket,
+which is the point of the split: "to review" is your revision queue, and
+"unmarked" is what you have not started. Clicking the state a question is
+already in steps it back to unmarked, so undoing a misclick is one tap.
+
+The sidebar's per-round counts track **known** only, so they keep meaning
+"done" rather than "touched".
+
+A browser that used the app before the three states existed has a flat list of
+reviewed ids under `qa-prep:reviewed`; those are read as **known** and folded
+in on first load. The key is kept in step afterwards so a rollback cannot
+resurrect ids you have since cleared.
 
 There is no login. The first run generates a random uuid, keeps it in
 `localStorage` as the device id, and sends it with every call. Sync is
