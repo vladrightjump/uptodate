@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import App from "../App";
+import App, { barSegments } from "../App";
 import { ALL_QUESTIONS, ROUNDS, TOTAL_QUESTIONS } from "../data/rounds";
 
 beforeEach(() => window.localStorage.clear());
@@ -68,20 +68,15 @@ describe("App progress", () => {
     expect(strip()).toContain(`${TOTAL_QUESTIONS - 2} unmarked`);
   });
 
-  it("never renders the two segments wider than the track", () => {
-    const half = Math.floor(TOTAL_QUESTIONS / 2);
+  it("renders both segments inside the track", () => {
     seedStatus({
-      ...Object.fromEntries(fromBank(half).map((id) => [id, "known" as const])),
-      ...Object.fromEntries(
-        fromBank(TOTAL_QUESTIONS - half, half).map((id) => [
-          id,
-          "review" as const,
-        ])
-      ),
+      ...Object.fromEntries(fromBank(3).map((id) => [id, "known" as const])),
+      ...Object.fromEntries(fromBank(2, 3).map((id) => [id, "review" as const])),
     });
     const { container } = render(<App />);
-    const total = barWidths(container).reduce((a, b) => a + b, 0);
-    expect(total).toBeLessThanOrEqual(100);
+    const [known, review] = barWidths(container);
+    expect(known! + review!).toBeLessThanOrEqual(100);
+    expect(review).toBeGreaterThan(0);
   });
 
   it("offers a reset once anything is marked", () => {
@@ -91,6 +86,35 @@ describe("App progress", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "review" })[0]!);
     expect(screen.getByRole("button", { name: "reset" })).toBeInTheDocument();
     expect(strip()).toContain("1 to review");
+  });
+});
+
+/* Rounding each share on its own lets them sum past 100 and overflow the
+   track: 1 known + 39 to review out of 40 rounds to 3% + 98%. Whether the
+   current TOTAL_QUESTIONS has such a split is an accident — 41 does not — so
+   the invariant is checked directly, across bank sizes. */
+describe("barSegments", () => {
+  it("never sums past 100, at any split of any bank size", () => {
+    for (let total = 1; total <= 120; total += 1) {
+      for (let known = 0; known <= total; known += 1) {
+        const review = total - known;
+        const { knownPct, reviewPct } = barSegments(known, review, total);
+        expect(
+          knownPct + reviewPct,
+          `${known} known + ${review} to review of ${total}`
+        ).toBeLessThanOrEqual(100);
+      }
+    }
+  });
+
+  it("still gives each bucket its share", () => {
+    expect(barSegments(1, 39, 40)).toEqual({ knownPct: 3, reviewPct: 97 });
+    expect(barSegments(20, 0, 40)).toEqual({ knownPct: 50, reviewPct: 0 });
+    expect(barSegments(0, 0, 40)).toEqual({ knownPct: 0, reviewPct: 0 });
+  });
+
+  it("does not divide by zero on an empty bank", () => {
+    expect(barSegments(0, 0, 0)).toEqual({ knownPct: 0, reviewPct: 0 });
   });
 });
 

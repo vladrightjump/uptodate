@@ -40,12 +40,20 @@ const NOTES_KEY = "qa-prep:notes";
 const PENDING_KEY = "qa-prep:pending-v2";
 const SEEDED_KEY = "qa-prep:pending-seeded-v2";
 
+type PendingBucket = "status" | "notes";
+
 interface Pending {
   status: string[];
   notes: string[];
+  /* A reset that has not reached the server yet. Persisted rather than held in
+     memory: without it, a reset whose request never settles (tab closed, phone
+     asleep) leaves local empty, the queue empty, and every row still on the
+     server — and the next load quietly undoes the whole thing. It supersedes
+     `status`, so the two are never both populated. */
+  clearAll: boolean;
 }
 
-const NO_PENDING: Pending = { status: [], notes: [] };
+const NO_PENDING: Pending = { status: [], notes: [], clearAll: false };
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -119,10 +127,11 @@ function readPending(): Pending {
   return {
     status: Array.isArray(p?.status) ? p.status : [],
     notes: Array.isArray(p?.notes) ? p.notes : [],
+    clearAll: p?.clearAll === true,
   };
 }
 
-function markPending(bucket: keyof Pending, id: string): void {
+function markPending(bucket: PendingBucket, id: string): void {
   const p = readPending();
   if (!p[bucket].includes(id)) {
     p[bucket] = [...p[bucket], id];
@@ -130,7 +139,7 @@ function markPending(bucket: keyof Pending, id: string): void {
   }
 }
 
-function clearPending(bucket: keyof Pending, id: string): void {
+function clearPending(bucket: PendingBucket, id: string): void {
   const p = readPending();
   const next = p[bucket].filter((x) => x !== id);
   if (next.length !== p[bucket].length) {
@@ -139,9 +148,18 @@ function clearPending(bucket: keyof Pending, id: string): void {
   }
 }
 
+function markPendingClear(): void {
+  /* The reset supersedes every queued per-question status push, so they go. */
+  write(PENDING_KEY, { ...readPending(), status: [], clearAll: true });
+}
+
+function clearPendingClear(): void {
+  write(PENDING_KEY, { ...readPending(), clearAll: false });
+}
+
 function nothingPending(): boolean {
   const p = readPending();
-  return p.status.length === 0 && p.notes.length === 0;
+  return p.status.length === 0 && p.notes.length === 0 && !p.clearAll;
 }
 
 /* First run against a database: everything already in this browser is
@@ -152,7 +170,11 @@ function seedPendingOnce(
   notes: Map<string, Note>
 ): void {
   if (read<string | null>(SEEDED_KEY, null)) return;
-  write(PENDING_KEY, { status: [...statuses.keys()], notes: [...notes.keys()] });
+  write(PENDING_KEY, {
+    status: [...statuses.keys()],
+    notes: [...notes.keys()],
+    clearAll: false,
+  });
   write(SEEDED_KEY, "1");
 }
 
@@ -192,41 +214,110 @@ export function useQuestionState(): QuestionState {
   useEffect(() => writeStatuses(statuses), [statuses]);
   useEffect(() => write(NOTES_KEY, Object.fromEntries(notes)), [notes]);
 
-  /* One promise chain per question, so a fast double-click issues its two
-     RPCs in order. Fired in parallel they can land in either order on the
-     server, leaving it disagreeing with the screen and nothing queued to
-     notice. */
-  const chains = useRef(new Map<string, Promise<unknown>>());
+  /* True once the initial load has been reconciled. Until then a successful
+     write says nothing about whether the two sides agree, so it must not turn
+     the dot green. */
+  const loaded = useRef(false);
+
+  /* Every RPC goes through one FIFO queue, replay and reset included. Ordering
+     them per-question was not enough: "reset" and an in-flight per-question
+     write raced, and whichever landed second won, so the server could keep a
+     row the screen said was gone. One queue makes the server see the same
+     order the user clicked in. Writes here are rare and tiny, so serialising
+     them globally costs nothing worth measuring. */
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+
+  const enqueue = useCallback(<T,>(run: () => Promise<T>): Promise<T> => {
+    /* Swallow the predecessor's rejection: it already reported itself, and one
+       failure must not cancel everything queued behind it. */
+    const next = queue.current.catch(() => {}).then(run);
+    queue.current = next.catch(() => {});
+    return next;
+  }, []);
+
+  /** Green only when the load has happened and the queue is genuinely empty. */
+  const settle = useCallback(() => {
+    if (loaded.current && nothingPending()) setSync("synced");
+  }, []);
 
   /** Fire-and-forget push. Failure is not an error the user has to act on —
-      the edit is already saved locally and the id stays queued for replay. */
+      the edit is already saved locally and the id stays queued for replay.
+      `current` re-reads what the write was meant to persist, so a value the
+      user changed mid-flight stays queued instead of being marked done. */
   const push = useCallback(
-    (bucket: keyof Pending, id: string, run: () => Promise<unknown>) => {
+    (
+      bucket: PendingBucket,
+      id: string,
+      run: () => Promise<unknown>,
+      stillCurrent: () => boolean
+    ) => {
       if (!dbConfigured) return;
       touched.current[bucket].add(id);
       markPending(bucket, id);
 
-      const key = `${bucket}:${id}`;
-      /* Swallow the predecessor's rejection: it already reported itself, and
-         one failure must not cancel every later edit to the same question. */
-      const tail = (chains.current.get(key) ?? Promise.resolve())
-        .catch(() => {})
-        .then(run)
+      enqueue(run)
         .then(() => {
-          clearPending(bucket, id);
-          /* Only claim "synced" when nothing at all is still queued —
-             otherwise one lucky write paints over work that never landed. */
-          if (nothingPending()) setSync("synced");
+          if (stillCurrent()) clearPending(bucket, id);
+          settle();
         })
         .catch(() => setSync("offline"));
-
-      chains.current.set(key, tail);
-      void tail.finally(() => {
-        if (chains.current.get(key) === tail) chains.current.delete(key);
-      });
     },
-    []
+    [enqueue, settle]
   );
+
+  /** Pushes everything still queued. Resolves false if anything failed. */
+  const flush = useCallback(async (): Promise<boolean> => {
+    const device = getDeviceId();
+    try {
+      await enqueue(async () => {
+        /* A pending reset goes first and drops the rows the per-question
+           entries below would otherwise be re-pushing on top of. */
+        if (readPending().clearAll) {
+          await db.clear(device);
+          clearPendingClear();
+        }
+        /* Re-read between steps: the queue guarantees ordering against other
+           RPCs, but the user can still click during an await. */
+        for (const id of readPending().status) {
+          const value = statusesRef.current.get(id) ?? null;
+          await db.setStatus(device, id, value);
+          /* Only mark done if this is still what the question says. Clearing
+             unconditionally dropped an edit made during the await, and the
+             next load then restored the value the user had just changed. */
+          if ((statusesRef.current.get(id) ?? null) === value) {
+            clearPending("status", id);
+          }
+        }
+        for (const id of readPending().notes) {
+          const note = notesRef.current.get(id);
+          if (note) await db.saveNote(device, id, note.body);
+          else await db.deleteNote(device, id);
+          if (notesRef.current.get(id)?.body === note?.body) {
+            clearPending("notes", id);
+          }
+        }
+      });
+      return true;
+    } catch {
+      setSync("offline");
+      return false;
+    }
+  }, [enqueue]);
+
+  /* "will sync later" has to mean something within the session, so a
+     reconnect replays the queue instead of waiting for a reload. */
+  useEffect(() => {
+    if (!dbConfigured) return;
+    const onOnline = () => {
+      if (nothingPending()) return;
+      setSync("loading");
+      void flush().then((ok) => {
+        if (ok) settle();
+      });
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [flush, settle]);
 
   useEffect(() => {
     if (!dbConfigured) return;
@@ -241,26 +332,12 @@ export function useQuestionState(): QuestionState {
       /* Replay first: the server's copy is only trustworthy once our local
          edits are in it. If any replay fails we keep the local state and stay
          "offline" rather than adopting a stale server view. */
-      const pending = readPending();
-      try {
-        for (const id of pending.status) {
-          await db.setStatus(device, id, statusesRef.current.get(id) ?? null);
-          clearPending("status", id);
-        }
-        for (const id of pending.notes) {
-          const note = notesRef.current.get(id);
-          if (note) await db.saveNote(device, id, note.body);
-          else await db.deleteNote(device, id);
-          clearPending("notes", id);
-        }
-      } catch {
-        if (!cancelled) setSync("offline");
-        return;
-      }
+      if (!(await flush())) return;
 
       try {
-        const remote = await db.load(device);
+        const remote = await enqueue(() => db.load(device));
         if (cancelled) return;
+        loaded.current = true;
 
         /* A reset landed while this was in flight, so the snapshot describes
            a world the user has already thrown away. Keep what's on screen. */
@@ -308,7 +385,7 @@ export function useQuestionState(): QuestionState {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enqueue, flush]);
 
   const statusOf = useCallback(
     (questionId: string): QuestionStatus => statuses.get(questionId) ?? "new",
@@ -323,40 +400,34 @@ export function useQuestionState(): QuestionState {
         else map.set(questionId, next);
         return map;
       });
-      push("status", questionId, () =>
-        db.setStatus(getDeviceId(), questionId, next === "new" ? null : next)
+      const value = next === "new" ? null : next;
+      push(
+        "status",
+        questionId,
+        () => db.setStatus(getDeviceId(), questionId, value),
+        () => (statusesRef.current.get(questionId) ?? null) === value
       );
     },
     [push]
   );
 
   const clearAll = useCallback(() => {
-    /* Captured before the state update: by the time the rejection below runs,
-       statusesRef.current is the empty map we just installed, so reading it
-       there would re-queue nothing and the next load would resurrect it all. */
-    const wiped = [...statusesRef.current.keys()];
-
     setStatuses(new Map());
     if (!dbConfigured) return;
 
     skipAdopt.current = true;
-    /* A wipe supersedes every queued status push. */
-    write(PENDING_KEY, { ...readPending(), status: [] });
+    /* Recorded before the request goes out, and only lifted once the server
+       confirms. If this never settles, the flag survives the reload and the
+       reset is replayed instead of being silently undone by the next load. */
+    markPendingClear();
 
-    db.clear(getDeviceId())
+    enqueue(() => db.clear(getDeviceId()))
       .then(() => {
-        if (nothingPending()) setSync("synced");
+        clearPendingClear();
+        settle();
       })
-      .catch(() => {
-        setSync("offline");
-        /* Re-queue so the replay pushes the cleared state for each id. */
-        const p = readPending();
-        write(PENDING_KEY, {
-          ...p,
-          status: [...new Set([...p.status, ...wiped])],
-        });
-      });
-  }, []);
+      .catch(() => setSync("offline"));
+  }, [enqueue, settle]);
 
   const deleteNote = useCallback(
     (questionId: string) => {
@@ -366,7 +437,12 @@ export function useQuestionState(): QuestionState {
         map.delete(questionId);
         return map;
       });
-      push("notes", questionId, () => db.deleteNote(getDeviceId(), questionId));
+      push(
+        "notes",
+        questionId,
+        () => db.deleteNote(getDeviceId(), questionId),
+        () => !notesRef.current.has(questionId)
+      );
     },
     [push]
   );
@@ -385,8 +461,11 @@ export function useQuestionState(): QuestionState {
         map.set(questionId, { body: trimmed, updated_at });
         return map;
       });
-      push("notes", questionId, () =>
-        db.saveNote(getDeviceId(), questionId, trimmed)
+      push(
+        "notes",
+        questionId,
+        () => db.saveNote(getDeviceId(), questionId, trimmed),
+        () => notesRef.current.get(questionId)?.body === trimmed
       );
     },
     [push, deleteNote]

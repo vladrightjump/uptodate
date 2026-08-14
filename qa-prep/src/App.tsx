@@ -40,6 +40,22 @@ const DIFF_FILTER_LABEL: Record<DiffFilter, string> = {
   hard: "hard",
 };
 
+/**
+ * Widths for the progress bar's two segments, as percentages of one track.
+ *
+ * Rounding each share on its own lets them sum past 100 and overflow: 1 known
+ * + 39 to review out of 40 rounds to 3% + 98%. Rounding the combined total and
+ * taking the difference keeps them inside the track at every split. Exported
+ * so the invariant can be checked across bank sizes — whether the current
+ * TOTAL_QUESTIONS happens to have an overflowing split is an accident.
+ */
+export function barSegments(known: number, review: number, total: number) {
+  if (total <= 0) return { knownPct: 0, reviewPct: 0 };
+  const knownPct = Math.round((known / total) * 100);
+  const markedPct = Math.round(((known + review) / total) * 100);
+  return { knownPct, reviewPct: Math.max(0, markedPct - knownPct) };
+}
+
 /** Jumps back to the top after a navigation. jsdom has no real scrolling. */
 function scrollToTop() {
   if (typeof window.scrollTo !== "function") return;
@@ -139,8 +155,11 @@ export default function App() {
     return { known, review, untouched: TOTAL_QUESTIONS - known - review };
   }, [statuses]);
 
-  const knownPct = Math.round((tally.known / TOTAL_QUESTIONS) * 100);
-  const reviewPct = Math.round((tally.review / TOTAL_QUESTIONS) * 100);
+  const { knownPct, reviewPct } = barSegments(
+    tally.known,
+    tally.review,
+    TOTAL_QUESTIONS
+  );
 
   /* Only "known" ids drive the sidebar's per-round count, so the numbers there
      keep meaning "done", not "touched". */

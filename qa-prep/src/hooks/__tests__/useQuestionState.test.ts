@@ -37,10 +37,9 @@ const stored = <T,>(key: string): T | null => {
 };
 
 const pending = () =>
-  stored<{ status: string[]; notes: string[] }>(PENDING_KEY) ?? {
-    status: [],
-    notes: [],
-  };
+  stored<{ status: string[]; notes: string[]; clearAll?: boolean }>(
+    PENDING_KEY
+  ) ?? { status: [], notes: [], clearAll: false };
 
 const anyDevice = expect.any(String);
 
@@ -204,7 +203,7 @@ describe("with a database", () => {
     expect(db.setStatus).toHaveBeenCalledWith(anyDevice, "a2", "review");
     expect(db.saveNote).toHaveBeenCalledWith(anyDevice, "a1", "mine");
     /* Every push landed, so nothing is left queued. */
-    expect(pending()).toEqual({ status: [], notes: [] });
+    expect(pending()).toEqual({ status: [], notes: [], clearAll: false });
   });
 
   it("keeps local state when the replay fails, rather than overwriting it", async () => {
@@ -366,7 +365,11 @@ describe("with a database", () => {
     });
   });
 
-  it("re-queues a reset that never reached the server", async () => {
+  /* The reset is queued as one flag rather than as a re-push per question.
+     Recording the intent is what matters: a reset whose request never settles
+     at all (tab closed, phone asleep) leaves nothing to replay otherwise, and
+     the next load restores every row. */
+  it("queues a reset that never reached the server", async () => {
     db.load.mockResolvedValue({
       statuses: { a1: "known", a2: "review" },
       notes: [],
@@ -378,8 +381,38 @@ describe("with a database", () => {
     act(() => result.current.clearAll());
 
     await waitFor(() => expect(result.current.sync).toBe("offline"));
-    /* Without these queued, the next load would restore both. */
-    expect(pending().status.sort()).toEqual(["a1", "a2"]);
+    expect(pending().clearAll).toBe(true);
+    expect(pending().status).toEqual([]);
+  });
+
+  it("marks the reset pending before the request, not after it fails", () => {
+    window.localStorage.setItem(STATUS_KEY, JSON.stringify({ a1: "known" }));
+    /* Never settles — the tab-closed / phone-asleep case. */
+    db.clear.mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() => useQuestionState());
+    act(() => result.current.clearAll());
+
+    expect(pending().clearAll).toBe(true);
+  });
+
+  it("replays a queued reset on the next load, before anything else", async () => {
+    window.localStorage.setItem(
+      PENDING_KEY,
+      JSON.stringify({ status: [], notes: [], clearAll: true })
+    );
+    window.localStorage.setItem("qa-prep:pending-seeded-v2", JSON.stringify("1"));
+    db.load.mockResolvedValue({ statuses: {}, notes: [] });
+
+    const { result } = renderHook(() => useQuestionState());
+
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
+    expect(db.clear).toHaveBeenCalled();
+    expect(pending().clearAll).toBe(false);
+    /* The clear has to precede the load, or the load adopts rows it deletes. */
+    expect(db.clear.mock.invocationCallOrder[0]).toBeLessThan(
+      db.load.mock.invocationCallOrder[0]!
+    );
   });
 
   it("does not call itself synced while an edit is still queued", async () => {
@@ -424,6 +457,121 @@ describe("with a database", () => {
     await waitFor(() => expect(order).toHaveLength(2));
     expect(order).toEqual(["review", "known"]);
     expect(result.current.statusOf("a1")).toBe("known");
+  });
+
+  /* Everything shares one FIFO queue, so the server sees the order the user
+     clicked in. Raced, a reset and an in-flight per-question write could land
+     either way round, and the server kept a row the screen said was gone. */
+  it("orders a reset after a write that is already in flight", async () => {
+    const calls: string[] = [];
+    let releaseWrite!: () => void;
+    db.setStatus.mockReturnValue(
+      new Promise((resolve) => {
+        releaseWrite = () => {
+          calls.push("setStatus");
+          resolve(undefined);
+        };
+      })
+    );
+    db.clear.mockImplementation(async () => {
+      calls.push("clear");
+    });
+
+    const { result } = renderHook(() => useQuestionState());
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
+
+    act(() => result.current.setStatus("a1", "known"));
+    act(() => result.current.clearAll());
+
+    /* The reset must not reach the server before the write it follows. */
+    expect(calls).toEqual([]);
+    await act(async () => {
+      releaseWrite();
+    });
+    await waitFor(() => expect(calls).toEqual(["setStatus", "clear"]));
+    expect(result.current.statuses.size).toBe(0);
+  });
+
+  /* The replay is sequential and slow on a cold start; the user can click
+     during one of its awaits. Clearing the queue entry unconditionally threw
+     that click away and the next load restored the old value. */
+  it("keeps an id queued when it changes during its own replay", async () => {
+    window.localStorage.setItem(STATUS_KEY, JSON.stringify({ a1: "known" }));
+
+    let releaseReplay!: () => void;
+    db.setStatus
+      /* The replay's push for a1, held open after it has read "known". */
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseReplay = () => resolve(undefined);
+        })
+      )
+      /* The user's edit, which does not reach the server. */
+      .mockRejectedValueOnce(new Error("offline"));
+
+    const { result } = renderHook(() => useQuestionState());
+
+    /* Wait until the replay has issued its write with the pre-click value —
+       clicking before this point would have it push the new value instead,
+       and there would be nothing stale to get wrong. */
+    await waitFor(() =>
+      expect(db.setStatus).toHaveBeenCalledWith(anyDevice, "a1", "known")
+    );
+
+    /* Mid-await, the user unmarks the very question being replayed. */
+    act(() => result.current.setStatus("a1", "new"));
+    await act(async () => {
+      releaseReplay();
+    });
+    await act(async () => {});
+
+    expect(result.current.statusOf("a1")).toBe("new");
+    /* The stale replay must not mark a1 done: the user's own write failed, so
+       clearing here drops the change and the next load restores "known". */
+    expect(pending().status).toEqual(["a1"]);
+  });
+
+  it("does not go green before the first load has been reconciled", async () => {
+    let releaseLoad!: () => void;
+    db.load.mockReturnValue(
+      new Promise((resolve) => {
+        releaseLoad = () => resolve({ statuses: {}, notes: [] });
+      })
+    );
+
+    const { result } = renderHook(() => useQuestionState());
+    act(() => result.current.setStatus("a1", "known"));
+
+    /* The write lands first on a cold start. It says nothing about whether
+       the two sides agree, so the dot must stay on "loading". */
+    await waitFor(() => expect(db.setStatus).toHaveBeenCalled());
+    expect(result.current.sync).toBe("loading");
+
+    await act(async () => {
+      releaseLoad();
+    });
+    expect(result.current.sync).toBe("synced");
+  });
+
+  /* "Offline — saved here, will sync later" has to mean something inside the
+     session, not only after a reload. */
+  it("flushes the queue when the browser comes back online", async () => {
+    const { result } = renderHook(() => useQuestionState());
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
+
+    db.setStatus.mockRejectedValueOnce(new Error("offline"));
+    act(() => result.current.setStatus("a1", "review"));
+    await waitFor(() => expect(result.current.sync).toBe("offline"));
+    expect(pending().status).toEqual(["a1"]);
+
+    db.setStatus.mockResolvedValue(undefined);
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+
+    await waitFor(() => expect(result.current.sync).toBe("synced"));
+    expect(pending().status).toEqual([]);
+    expect(db.setStatus).toHaveBeenLastCalledWith(anyDevice, "a1", "review");
   });
 
   it("wipes progress on the server too", async () => {
