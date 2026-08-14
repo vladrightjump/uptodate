@@ -112,7 +112,17 @@ if (!guide.ok) {
   fail(`Standalone study guide is missing from the deploy (HTTP ${guide.status}).`);
 }
 
-const body = await guide.text();
+/* Reading the body is still covered by the same AbortSignal, so a deploy whose
+   headers arrive just under the timeout and whose body then stalls rejects
+   here. Outside a try that surfaced as a raw stack trace instead of the
+   ::error:: annotation this script exists to produce. */
+let body;
+try {
+  body = await guide.text();
+} catch (err) {
+  fail(`Could not read the standalone study guide: ${err.message}`);
+}
+
 const stamped = body.match(
   /<meta name="qa-prep:questions" content="(\d+)"/
 );

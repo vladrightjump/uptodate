@@ -13,14 +13,16 @@ This is not a generic SaaS. The risk profile is unusual:
 - **Static-content-heavy.** The corpus in `src/data/*` is the product
   value. A typo or broken media URL hurts more than a re-rendered
   component.
-- **Local-first persistence.** `localStorage` is the render source for
-  "known" flags and per-question notes; `qa-prep` mirrors both to Supabase
-  through five stored procedures, keyed by an anonymous per-browser device
-  id. The blast radius of a persistence bug is one user, not a multi-tenant
-  outage — but for that user it means lost progress, so the sync path is
-  unit-tested against a mocked `lib/db` (`useQuestionState.test.ts`), with
-  the replay-before-adopt ordering covered explicitly.
-  The legacy root app remains local-only.
+- **Local-first persistence.** `localStorage` is the render source for the
+  three-state study status (unmarked / review / known) and per-question
+  notes; `qa-prep` mirrors both to Supabase through five stored procedures,
+  keyed by an anonymous per-browser device id. The blast radius of a
+  persistence bug is one user, not a multi-tenant outage — but for that user
+  it means lost progress, so the sync path is unit-tested against a mocked
+  `lib/db` (`useQuestionState.test.ts`): replay-before-adopt ordering,
+  edit-during-load merging, reset re-queueing, and per-question write
+  serialisation, plus the one-way migration from the old flat "reviewed"
+  list. The legacy root app remains local-only.
 - **Heavy visual dependencies.** R3F (`@react-three/fiber`) and Mermaid
   cannot run under jsdom and are not cheap to start under a real
   browser. They distort any naive pyramid that assumes uniform cost.

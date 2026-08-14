@@ -310,15 +310,6 @@ input[type="checkbox"] {
   box-shadow: var(--shadow);
 }
 
-.switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-dim);
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-}
 
 .ghost {
   padding: 8px 13px;
@@ -401,6 +392,7 @@ input[type="checkbox"] {
 }
 
 .progress-bar {
+  display: flex;
   flex: 1;
   height: 6px;
   background: var(--surface-3);
@@ -408,12 +400,19 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 
+/* Two segments side by side in one track, so the gap left at the end is
+   exactly what is still unmarked. */
 .progress-bar span {
-  display: block;
   height: 100%;
-  background: var(--accent);
-  border-radius: 99px;
   transition: width 0.25s ease;
+}
+
+.progress-bar .seg-known {
+  background: var(--easy);
+}
+
+.progress-bar .seg-review {
+  background: var(--mid);
 }
 
 .progress-label {
@@ -423,6 +422,16 @@ input[type="checkbox"] {
   font-size: 11.5px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.progress-label strong {
+  color: var(--text-dim);
+  font-weight: 800;
+}
+
+.progress-sep {
+  padding: 0 6px;
+  opacity: 0.5;
 }
 
 /* ---------- layout ---------- */
@@ -612,8 +621,14 @@ input[type="checkbox"] {
   background: var(--surface-2);
 }
 
-.card.is-reviewed {
+.card.is-known {
   border-left: 4px solid var(--easy);
+}
+
+/* Amber, matching the "review" control and the progress bar's second segment,
+   so the backlog reads the same everywhere. */
+.card.is-review {
+  border-left: 4px solid var(--mid);
 }
 
 .card-toggle {
@@ -694,17 +709,58 @@ input[type="checkbox"] {
   color: var(--text-dim);
 }
 
-.reviewed-box {
+/* ---------- three-state control ---------- */
+
+.status-pick {
   display: inline-flex;
-  gap: 6px;
+  gap: 2px;
   align-items: center;
   margin-left: auto;
-  padding: 4px 8px;
+  padding: 2px;
+  background: var(--surface-3);
+  border-radius: 999px;
+}
+
+.status-opt {
+  padding: 4px 11px;
+  background: none;
+  border: 0;
   border-radius: 999px;
   color: var(--text-faint);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+/* The "back to unmarked" option is a dash, so it needs a squarer hit area of
+   its own rather than the padding the two word-length options get. */
+.status-opt.opt-new {
+  min-width: 26px;
+  padding: 4px 6px;
+}
+
+@media (hover: hover) {
+  .status-opt:hover {
+    color: var(--text);
+  }
+}
+
+.status-opt.is-on {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.status-opt.opt-review.is-on {
+  color: var(--mid);
+}
+
+.status-opt.opt-known.is-on {
+  color: var(--easy);
+}
+
+.status-opt.opt-new.is-on {
+  color: var(--text-dim);
 }
 
 /* ---------- notes ---------- */
@@ -1230,12 +1286,6 @@ table.data thead th {
     font-size: 12.5px;
   }
 
-  .filter-row .switch {
-    flex: 1;
-    padding: 8px 2px;
-    font-size: 13.5px;
-  }
-
   .filter-row .ghost {
     padding: 10px 14px;
     font-size: 13px;
@@ -1340,8 +1390,15 @@ table.data thead th {
     padding: 0 14px 10px;
   }
 
-  .reviewed-box {
-    padding: 6px 10px;
+  /* Thumb-sized targets: three of them sit in the row where one checkbox
+     used to, and a mis-tap costs a state change. */
+  .status-opt {
+    padding: 7px 13px;
+  }
+
+  .status-opt.opt-new {
+    min-width: 32px;
+    padding: 7px 8px;
   }
 
   /* Big enough to hit with a thumb, and no longer indented to the answer's

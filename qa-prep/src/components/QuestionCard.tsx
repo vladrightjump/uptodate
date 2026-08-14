@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Note } from "../hooks/useQuestionState";
+import type { Note, QuestionStatus } from "../hooks/useQuestionState";
 import type { Question } from "../types";
 import { CodeBlock } from "./CodeBlock";
 import { NoteEditor } from "./NoteEditor";
@@ -8,14 +8,22 @@ interface Props {
   question: Question;
   index: number;
   open: boolean;
-  reviewed: boolean;
+  status: QuestionStatus;
   /** Undefined when this question has no note yet. */
   note?: Note;
   onToggleOpen: (id: string) => void;
-  onToggleReviewed: (id: string) => void;
+  onSetStatus: (id: string, status: QuestionStatus) => void;
   onSaveNote: (id: string, body: string) => void;
   onDeleteNote: (id: string) => void;
 }
+
+/* "new" is the absence of a choice, so it is offered as a way back out rather
+   than as something you set on purpose — hence the dash. */
+const STATUS_CHOICES: { value: QuestionStatus; label: string; hint: string }[] = [
+  { value: "new", label: "–", hint: "Not marked yet" },
+  { value: "review", label: "review", hint: "Come back to this one" },
+  { value: "known", label: "known", hint: "Solid — I can answer this" },
+];
 
 const DIFF_LABEL: Record<Question["diff"], string> = {
   easy: "easy",
@@ -27,10 +35,10 @@ export function QuestionCard({
   question,
   index,
   open,
-  reviewed,
+  status,
   note,
   onToggleOpen,
-  onToggleReviewed,
+  onSetStatus,
   onSaveNote,
   onDeleteNote,
 }: Props) {
@@ -38,7 +46,7 @@ export function QuestionCard({
   const [editing, setEditing] = useState(false);
 
   return (
-    <article className={`card${reviewed ? " is-reviewed" : ""}`}>
+    <article className={`card is-${status}`}>
       <div className="card-head">
         <button
           type="button"
@@ -63,14 +71,40 @@ export function QuestionCard({
               {t}
             </span>
           ))}
-          <label className="reviewed-box">
-            <input
-              type="checkbox"
-              checked={reviewed}
-              onChange={() => onToggleReviewed(question.id)}
-            />
-            <span>known</span>
-          </label>
+          <div
+            className="status-pick"
+            role="group"
+            aria-label={`How well do you know question ${index}?`}
+          >
+            {STATUS_CHOICES.map((choice) => (
+              <button
+                key={choice.value}
+                type="button"
+                className={`status-opt opt-${choice.value}${
+                  status === choice.value ? " is-on" : ""
+                }`}
+                aria-pressed={status === choice.value}
+                title={choice.hint}
+                /* Clicking the state you're already in steps back to unmarked,
+                   so undoing a misclick is one tap, not a hunt for the dash. */
+                onClick={() =>
+                  onSetStatus(
+                    question.id,
+                    status === choice.value ? "new" : choice.value
+                  )
+                }
+              >
+                {choice.value === "new" ? (
+                  <span aria-hidden="true">{choice.label}</span>
+                ) : (
+                  choice.label
+                )}
+                {choice.value === "new" && (
+                  <span className="sr-only">Not marked</span>
+                )}
+              </button>
+            ))}
+          </div>
 
           <button
             type="button"
